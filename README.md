@@ -6,6 +6,12 @@ Hestia is a personal Linux image designed for development, productivity, and eve
 
 The goal is not to create a gaming distribution, but a dependable workstation environment where development tools, virtual machines, creative applications, and games all work well together.
 
+## Switch to Hestia
+
+```
+sudo bootc switch ghcr.io/b-koch/hestia
+```
+
 ## Why "Hestia"?
 
 In Greek mythology, **Hestia** is the goddess of the hearth, home, and domestic stability.
