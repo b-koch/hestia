@@ -1,3 +1,69 @@
+# Hestia Linux
+
+A reliable, production-focused desktop image built on top of Bazzite.
+
+Hestia is a personal Linux image designed for development, productivity, and everyday computing while retaining the gaming optimizations and hardware support that make Bazzite a strong foundation.
+
+The goal is not to create a gaming distribution, but a dependable workstation environment where development tools, virtual machines, creative applications, and games all work well together.
+
+## Why "Hestia"?
+
+In Greek mythology, **Hestia** is the goddess of the hearth, home, and domestic stability.
+
+The hearth was the center of the ancient Greek home: a constant source of warmth, safety, and reliability. Unlike many figures in Greek mythology, Hestia is not associated with conflict or conquest. Her role is quiet and essential — maintaining the foundation that allows everything else to happen.
+
+This reflects the purpose of Hestia Linux:
+
+> The operating system should be a reliable foundation, not the focus of attention.
+
+Hestia aims to be a stable home for:
+
+* myself
+* software development
+* virtualization and testing
+* productivity workflows
+* creative work
+* gaming
+
+## Goals
+
+* Provide a reliable workstation environment
+* Keep the benefits of an atomic Linux system
+* Support development workflows out of the box
+* Include virtualization capabilities by default
+* Maintain strong gaming compatibility
+* Reduce unnecessary components and distractions
+* Stay close to upstream while providing sensible defaults
+
+## Based on
+
+Hestia is built using the Bazzite image template and follows the Universal Blue image building approach.
+
+It uses Bazzite as a foundation because of its excellent hardware enablement, gaming optimizations, and immutable system design.
+
+Hestia extends that foundation toward a broader workstation use case.
+
+## Features
+
+* Atomic updates and rollback capabilities
+* Modern Linux desktop stack
+* Development-focused tooling
+* Virtual machine support
+* Container-friendly workflow
+* Gaming optimizations inherited from Bazzite
+* Customized system defaults
+
+## Philosophy
+
+A good operating system should be like a well-kept home:
+
+The foundation is dependable.
+The tools are available when needed.
+The system stays out of the way.
+
+Hestia aims to provide that quiet foundation.
+
+
 # image-template
 
 This repository is meant to be a template for building your own custom [bootc](https://github.com/bootc-dev/bootc) image. This template is the recommended way to make customizations to any image published by the Universal Blue Project.
