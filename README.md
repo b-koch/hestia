@@ -1,4 +1,4 @@
-# Hestia Linux
+# Hestia
 
 A reliable, production-focused desktop image built on top of Bazzite.
 
