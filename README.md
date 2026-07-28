@@ -6,6 +6,12 @@ Hestia is a personal Linux image designed for development, productivity, and eve
 
 The goal is not to create a gaming distribution, but a dependable workstation environment where development tools, virtual machines, creative applications, and games all work well together.
 
+## Switch to Hestia
+
+```
+sudo bootc switch ghcr.io/b-koch/hestia
+```
+
 ## Why "Hestia"?
 
 In Greek mythology, **Hestia** is the goddess of the hearth, home, and domestic stability.
@@ -63,6 +69,78 @@ The system stays out of the way.
 
 Hestia aims to provide that quiet foundation.
 
+# After Install
+  ```
+  sudo bash -c 'grep "plugdev" /lib/group >> /etc/group' && sudo usermod -a -G plugdev $USER
+  rpm-ostree kargs --append-if-missing=$(printf 'amdgpu.ppfeaturemask=0x%x\n' "$(($(cat /sys/module/amdgpu/parameters/ppfeaturemask) | 0x4000))")
+  sudo groupadd docker
+  sudo usermod -aG docker $USER
+  ```
+
+# Battery tray example for Razer Viper V3 Pro
+  ```
+  razer-battery-tray 'Razer Viper V3 Pro' > /dev/null 2>&1 & disown
+  ```
+
+# Set up gnome app folders
+  ```
+  dconf reset -f "/org/gnome/desktop/app-folders/"
+  gsettings set org.gnome.desktop.app-folders folder-children "['Office', 'Graphics', 'Development', 'Audio&Video', 'Games', 'Education', 'Network', 'Science', 'Settings', 'System', 'Utilities', 'GamingUtilities', 'Containers', 'Misc', 'Wine', 'YaST', 'Pardus']"
+  
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ categories "['Office', 'WordProcessor', 'Spreadsheet', 'Presentation', 'Scanning']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ name "Office"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Development/ categories "['Development', 'IDE']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Development/ name "Development"
+  gsettings set org.gnome.desktop.app-folders.folder:"/org/gnome/desktop/app-folders/folders/Audio&Video/" categories "['AudioVideo', 'Audio', 'Video', 'Recorder']"
+  gsettings set org.gnome.desktop.app-folders.folder:"/org/gnome/desktop/app-folders/folders/Audio&Video/" name "Audio & Video"
+  gsettings set org.gnome.desktop.app-folders.folder:"/org/gnome/desktop/app-folders/folders/Audio&Video/" apps "['com.blackmagicdesign.resolve.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Games/ categories "['Game']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Games/ name "Games"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Games/ excluded-apps "['wine-winemine.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Education/ categories "['Education']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Education/ name "Education"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Network/ categories "['Network', 'WebBrowser', 'FileTransfer']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Network/ name "Web"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Network/ excluded-apps "['steam.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Science/ categories "['Science']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Science/ name "Science"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Settings/ categories "['Settings']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Settings/ name "Settings"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/System/ categories "['System']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/System/ name "System"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilities/ categories "['Utility']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilities/ name "Utilities"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Graphics/ categories "['Graphics', '2DGraphics', 'RasterGraphics']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Graphics/ name "Graphics"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Graphics/ excluded-apps "['org.gnome.Evince.desktop', 'simple-scan.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Wine/ categories "['X-Wine']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Wine/ name "Wine"
+  gsettings set org.gnome.desktop.app-folders.folder:"/org/gnome/desktop/app-folders/folders/Wine/" apps "['wine-winemine.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Containers/ name "Containers"
+  gsettings set org.gnome.desktop.app-folders.folder:"/org/gnome/desktop/app-folders/folders/Containers/" apps "['org.gnome.Boxes.desktop', 'virt-manager.desktop']"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Misc/ name "Misc"
+  gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Misc/ apps "['com.blackmagicdesign.resolve-Panels.desktop', 'com.blackmagicdesign.resolve-Installer.desktop', 'com.blackmagicdesign.resolve-CaptureLogs.desktop']"
+  ```
+
+# Set up additional short-cuts
+  ```
+  gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Left', '<Super>less']"
+  gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Right', '<Super>y']"
+  gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Shift><Super>Left', '<Shift><Super>less']"
+  gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Shift><Super>Right', '<Shift><Super>y']"
+  
+  gsettings get org.gnome.desktop.wm.keybindings switch-to-workspace-left
+  gsettings get org.gnome.desktop.wm.keybindings switch-to-workspace-right
+  gsettings get org.gnome.desktop.wm.keybindings move-to-workspace-left
+  gsettings get org.gnome.desktop.wm.keybindings move-to-workspace-right
+  ```
+
+# Settings
+  ```
+  gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 1
+  sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+  gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+  ```
 
 # image-template
 
