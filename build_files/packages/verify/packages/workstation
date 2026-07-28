@@ -1,0 +1,5 @@
+# Hestia workstation features
+virt-manager
+libvirt
+qemu-kvm
+edk2-ovmf
