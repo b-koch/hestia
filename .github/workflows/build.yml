@@ -16,7 +16,7 @@ env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,7 +62,7 @@ jobs:
 
           echo "Scheduled run. Comparing base image digest..."
 
-          # Read stored base digest label from our custom image manifest
+          # Read stored base digest label from the custom image manifest
           CUSTOM_BASE_DIGEST=$(skopeo inspect docker://$CUSTOM_IMAGE | jq -r '.Labels["org.opencontainers.image.base.digest"] // empty' 2>/dev/null || echo "")
 
           echo "Current upstream base digest: ${BASE_DIGEST}"
@@ -132,7 +132,7 @@ jobs:
       - name: Rechunk image
         id: rechunk
         run: |
-          just rechunk \
+          sudo -E $(command -v just) rechunk \
             ${IMAGE_NAME} \
             ${DEFAULT_TAG}
 
