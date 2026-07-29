@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API="https://api.github.com/repos/Heroic-Games-Launcher/HeroicGamesLauncher/releases/latest"
+latest_url=$(curl -fsSL -o /dev/null -w "%{url_effective}" https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/latest)
 
-curl -fsSL -H "User-Agent: BuildScript" "$API" | jq -r '.assets[] | select(.name | test("linux-x86_64\\.rpm$")) | .browser_download_url'
+tag="${latest_url##*/}"
+version="${tag#v}"
+
+echo "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/${tag}/Heroic-${version}-linux-x86_64.rpm"
