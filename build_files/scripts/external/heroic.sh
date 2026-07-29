@@ -10,7 +10,7 @@ rpm_url=$(
         | .browser_download_url'
 )
 
-tmp=$(mktemp)
+tmp=$(mktemp --suffix=.rpm)
 
 curl -L "$rpm_url" -o "$tmp"
 
