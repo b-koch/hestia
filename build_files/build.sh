@@ -22,6 +22,9 @@ echo "Verifying important packages, services and commands..."
 /ctx/scripts/verify_services.sh
 /ctx/scripts/verify_commands.sh
 
+echo "Run external installers..."
+/ctx/scripts/run_external_installers.sh
+
 ### Install packages
 
 # Packages can be installed from any enabled yum repo on the image.

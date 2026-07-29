@@ -1,0 +1,4 @@
+--unset-env=WAYLAND_DISPLAY
+--nosocket=wayland
+--nosocket=fallback-x11
+--socket=x11

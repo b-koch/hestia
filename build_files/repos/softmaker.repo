@@ -1,0 +1,6 @@
+[softmaker]
+name=SoftMaker Software GmbH
+baseurl=https://shop.softmaker.com/repo/rpm
+enabled=1
+gpgcheck=1
+gpgkey=https://shop.softmaker.com/repo/rpm/softmaker-repo.asc

@@ -1,0 +1,22 @@
+# Virtualization host
+virt-manager
+libvirt
+qemu-kvm
+qemu-img
+virt-install
+virt-viewer
+
+# UEFI support
+edk2-ovmf
+
+# TPM support (Windows 11, etc.)
+swtpm
+swtpm-tools
+
+# Networking
+dnsmasq
+bridge-utils
+
+# Helpful CLI tools
+guestfs-tools
+libguestfs
