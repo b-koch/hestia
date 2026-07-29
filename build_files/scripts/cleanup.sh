@@ -12,9 +12,6 @@ log "Starting system cleanup"
 # Remove autostart files
 # Example: rm /etc/skel/.config/autostart/steam.desktop
 
-# Remove unwanted .desktop files
-rm -f /usr/share/applications/waydroid-container-restart.desktop
-
 # Remove remnants
 REMNANTS=(
   "/usr/share/applications/Waydroid"
