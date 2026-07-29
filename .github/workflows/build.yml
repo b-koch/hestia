@@ -3,10 +3,6 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - '**/README.md'
-      - '**/LICENSE'
-      - 'tools/**'
   schedule:
     - cron: '0 */3 * * *'  # Runs every 3 hours
   push:
