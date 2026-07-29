@@ -69,19 +69,6 @@ The system stays out of the way.
 
 Hestia aims to provide that quiet foundation.
 
-# After Install
-  ```
-  sudo bash -c 'grep "plugdev" /lib/group >> /etc/group' && sudo usermod -a -G plugdev $USER
-  rpm-ostree kargs --append-if-missing=$(printf 'amdgpu.ppfeaturemask=0x%x\n' "$(($(cat /sys/module/amdgpu/parameters/ppfeaturemask) | 0x4000))")
-  sudo groupadd docker
-  sudo usermod -aG docker $USER
-  ```
-
-# Battery tray example for Razer Viper V3 Pro
-  ```
-  razer-battery-tray 'Razer Viper V3 Pro' > /dev/null 2>&1 & disown
-  ```
-
 # Set up gnome app folders
   ```
   dconf reset -f "/org/gnome/desktop/app-folders/"
@@ -141,6 +128,8 @@ Hestia aims to provide that quiet foundation.
   sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
   gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
   ```
+
+---
 
 # image-template
 
