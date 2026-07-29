@@ -18,7 +18,7 @@ env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && github.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
