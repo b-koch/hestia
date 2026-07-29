@@ -34,5 +34,8 @@ echo "Verifying important packages, services and commands..."
 echo "Disable repositories..."
 /ctx/scripts/disable_repos.sh
 
+echo "Add Hestia branding..."
+/ctx/scripts/hestia_branding.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
