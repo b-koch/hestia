@@ -20,8 +20,8 @@ echo "Installing external rpms..."
 echo "Installing flatpaks..."
 /ctx/scripts/install_flatpaks.sh
 
-echo "Applying flatpak overrides..."
-/ctx/scripts/apply-flatpak-overrides.sh
+echo "Installing fonts..."
+/ctx/scripts/install_fonts.sh
 
 echo "Applying configuration..."
 /ctx/scripts/configure.sh
@@ -32,5 +32,8 @@ echo "Verifying important packages, services and commands..."
 #/ctx/scripts/verify_commands.sh
 #/ctx/scripts/verify_rpms.sh
 
-echo "Removing repositories..."
-/ctx/scripts/remove_repos.sh
+echo "Disable repositories..."
+/ctx/scripts/disable_repos.sh
+
+echo "Final cleanup..."
+/ctx/scripts/cleanup.sh

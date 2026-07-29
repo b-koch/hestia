@@ -7,7 +7,7 @@ OVERRIDE_DIR="/ctx/flatpaks/overrides"
 APPS=()
 OVERRIDE_CMDS=()
 
-# 1. Parse install list files
+# Parse install list files
 if [[ -d "$FLATPAK_DIR" ]]; then
     for list in "$FLATPAK_DIR"/*; do
         [[ -f "$list" ]] || continue
@@ -23,7 +23,7 @@ if [[ ${#APPS[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# 2. Parse override files and build exact 'flatpak override' command strings
+# Parse override files and build exact 'flatpak override' command strings
 if [[ -d "$OVERRIDE_DIR" ]]; then
     for file in "$OVERRIDE_DIR"/*; do
         [[ -f "$file" ]] || continue
@@ -42,7 +42,7 @@ if [[ -d "$OVERRIDE_DIR" ]]; then
     done
 fi
 
-# 3. Format override commands for inline execution
+# Format override commands for inline execution
 OVERRIDES_INLINE=""
 if [[ ${#OVERRIDE_CMDS[@]} -gt 0 ]]; then
     OVERRIDES_INLINE=" && $(IFS=" && "; echo "${OVERRIDE_CMDS[*]}")"
@@ -50,7 +50,7 @@ fi
 
 echo "Baking ${#APPS[@]} Flatpak(s) and ${#OVERRIDE_CMDS[@]} override command(s) into systemd service..."
 
-# 4. Write the fully self-contained systemd oneshot service
+# Write the fully self-contained systemd oneshot service
 cat <<EOF > /usr/lib/systemd/system/install-custom-flatpaks.service
 [Unit]
 Description=Install Custom Flatpaks and Overrides on First Boot
