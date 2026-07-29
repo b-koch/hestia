@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euox pipefail
+set -euo pipefail
 
 TARGET_DIR="/usr/share/fonts/AdwaitaMono"
 

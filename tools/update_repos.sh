@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -oue pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="${SCRIPT_DIR}/../repos"
+REPO_DIR="${SCRIPT_DIR}/../build_files/repos"
 SOURCE_FILE="${REPO_DIR}/sources.list"
 
 mkdir -p "$REPO_DIR"
@@ -40,6 +40,7 @@ while IFS='|' read -r filename url; do
         echo "  ✗ Failed"
     fi
 done < "$SOURCE_FILE"
+
 
 echo
 echo "Repository update complete."

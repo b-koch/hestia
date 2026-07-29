@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
+source /ctx/lib/read_list.sh
 
 FAILED=0
 
@@ -9,16 +9,14 @@ for file in /ctx/packages/verify/*; do
 
     echo "Verifying packages: $(basename "$file")"
 
-    while read -r package; do
-        [[ -z "$package" || "$package" =~ ^# ]] && continue
-
+    while IFS= read -r package; do
         if rpm -q "$package" >/dev/null 2>&1; then
             echo "  OK: $package"
         else
             echo "  MISSING: $package"
             FAILED=1
         fi
-    done < "$file"
+    done < <(read_list "$file")
 done
 
 exit "$FAILED"

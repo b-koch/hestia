@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
 
 for repo in /ctx/repos/*.repo; do
     [ -e "$repo" ] || continue

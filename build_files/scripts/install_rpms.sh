@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euox pipefail
+set -euo pipefail
 
 RPMS_INSTALL_DIR="/ctx/rpms/install"
 

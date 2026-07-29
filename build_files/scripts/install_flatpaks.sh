@@ -1,75 +1,95 @@
 #!/usr/bin/env bash
-set -ouex pipefail
+set -euo pipefail
+source /ctx/lib/read_list.sh
 
 FLATPAK_DIR="/ctx/flatpaks/install"
 OVERRIDE_DIR="/ctx/flatpaks/overrides"
 
-APPS=()
-OVERRIDE_CMDS=()
+SCRIPT="/usr/libexec/hestia/install-flatpaks"
+SERVICE="/usr/lib/systemd/system/hestia-flatpaks.service"
 
-# Parse install list files
+mkdir -p /usr/libexec/hestia
+mkdir -p /var/lib/hestia
+
+APPS=()
+
+# Read Flatpak install lists
 if [[ -d "$FLATPAK_DIR" ]]; then
     for list in "$FLATPAK_DIR"/*; do
         [[ -f "$list" ]] || continue
-        while IFS= read -r line; do
-            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-            APPS+=("$line")
-        done < "$list"
+
+        while IFS= read -r app; do
+            APPS+=("$app")
+        done < <(read_list "$list")
     done
 fi
 
-if [[ ${#APPS[@]} -eq 0 ]]; then
-    echo "No Flatpaks configured for installation."
+echo "Generating Flatpak first-boot installer..."
+
+cat > "$SCRIPT" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+MARKER="/var/lib/hestia/flatpaks-installed"
+
+mkdir -p "$(dirname "$MARKER")"
+
+
+if [[ -f "$MARKER" ]]; then
     exit 0
 fi
 
-# Parse override files and build exact 'flatpak override' command strings
+flatpak remote-add \
+    --if-not-exists \
+    flathub \
+    https://dl.flathub.org/repo/flathub.flatpakrepo
+EOF
+
+# Install Flatpaks
+for app in "${APPS[@]}"; do
+    printf 'flatpak install --system --noninteractive --assumeyes flathub %q\n' "$app" >> "$SCRIPT"
+done
+
+# Apply overrides
 if [[ -d "$OVERRIDE_DIR" ]]; then
     for file in "$OVERRIDE_DIR"/*; do
         [[ -f "$file" ]] || continue
+
         app_id="$(basename "$file")"
 
-        args=()
-        while IFS= read -r line; do
-            [[ -z "${line// }" ]] && continue
-            [[ "$line" =~ ^# ]] && continue
-            args+=("$line")
-        done < "$file"
+        mapfile -t args < <(read_list "$file")
 
         if [[ ${#args[@]} -gt 0 ]]; then
-            OVERRIDE_CMDS+=("/usr/bin/flatpak override --system ${args[*]} $app_id")
+            printf 'flatpak override --system ' >> "$SCRIPT"
+            printf '%q ' "${args[@]}" >> "$SCRIPT"
+            printf '%q\n' "$app_id" >> "$SCRIPT"
         fi
     done
 fi
 
-# Format override commands for inline execution
-OVERRIDES_INLINE=""
-if [[ ${#OVERRIDE_CMDS[@]} -gt 0 ]]; then
-    OVERRIDES_INLINE=" && $(IFS=" && "; echo "${OVERRIDE_CMDS[*]}")"
-fi
+cat >> "$SCRIPT" <<'EOF'
 
-echo "Baking ${#APPS[@]} Flatpak(s) and ${#OVERRIDE_CMDS[@]} override command(s) into systemd service..."
+mkdir -p /var/lib/hestia
+touch "$MARKER"
+EOF
 
-# Write the fully self-contained systemd oneshot service
-cat <<EOF > /usr/lib/systemd/system/install-custom-flatpaks.service
+chmod +x "$SCRIPT"
+
+cat > "$SERVICE" <<EOF
 [Unit]
-Description=Install Custom Flatpaks and Overrides on First Boot
+Description=Install Hestia Flatpaks
 After=network-online.target flatpak-system-helper.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/bin/flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-ExecStart=/usr/bin/bash -c '\
-  if [ ! -f /var/lib/custom-flatpaks-installed ]; then \
-    /usr/bin/flatpak install --system --noninteractive --assumeyes flathub ${APPS[*]}${OVERRIDES_INLINE} && \
-    touch /var/lib/custom-flatpaks-installed; \
-  fi'
+ExecStart=$SCRIPT
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 5. Enable service for host execution post-boot
-systemctl enable install-custom-flatpaks.service
+systemctl enable hestia-flatpaks.service
+
+echo "Flatpak first-boot installer created."

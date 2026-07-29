@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
+source /ctx/lib/read_list.sh
 
 FAILED=0
 
@@ -18,7 +18,7 @@ for file in /ctx/verify/commands/*; do
             echo "  MISSING: $command"
             FAILED=1
         fi
-    done < "$file"
+    done < <(read_list "$file")
 done
 
 exit "$FAILED"

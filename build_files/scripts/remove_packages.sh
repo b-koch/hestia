@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
+source /ctx/lib/read_list.sh
 
 for list in /ctx/packages/remove/*; do
     [ -f "$list" ] || continue
 
     echo "Removing $(basename "$list")"
 
-    mapfile -t packages < <(
-        grep -v '^#' "$list" | grep -v '^$'
-    )
+    mapfile -t packages < <(read_list "$list")
 
     if [ "${#packages[@]}" -gt 0 ]; then
-        dnf5 remove -y "${packages[@]}" || true
+        dnf5 remove -y --skip-unavailable "${packages[@]}" || true
     fi
 done

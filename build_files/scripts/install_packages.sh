@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-
-set -euox pipefail
+set -euo pipefail
+source /ctx/lib/read_list.sh
 
 PACKAGES_INSTALL_DIR="/ctx/packages/install"
 packages=()
@@ -11,10 +11,10 @@ if [ -d "$PACKAGES_INSTALL_DIR" ]; then
     for file in "$PACKAGES_INSTALL_DIR"/*; do
         if [ -f "$file" ]; then
             echo "Reading packages from: $(basename "$file")"
-            
+
             while IFS= read -r pkg; do
                 packages+=("$pkg")
-            done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$file")
+            done < <(read_list "$file")
         fi
     done
 fi

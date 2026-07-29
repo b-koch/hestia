@@ -1,3 +1,2 @@
 #!/bin/bash
-
-set -ouex pipefail
+set -euo pipefail

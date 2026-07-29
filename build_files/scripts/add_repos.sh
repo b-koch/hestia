@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
 
 mkdir -p /etc/yum.repos.d
 

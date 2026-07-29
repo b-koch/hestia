@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-
-set -ouex pipefail
+set -euo pipefail
 
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
