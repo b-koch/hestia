@@ -24,7 +24,6 @@ for file in "$OVERRIDE_DIR"/*; do
     args=()
 
     while IFS= read -r line; do
-        # Skip comments and blank lines
         [[ -z "${line// }" ]] && continue
         [[ "$line" =~ ^# ]] && continue
 

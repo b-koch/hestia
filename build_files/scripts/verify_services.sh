@@ -4,7 +4,7 @@ set -ouex pipefail
 
 FAILED=0
 
-for file in /ctx/verify/services/*; do
+for file in /ctx/services/verify/*; do
     [ -f "$file" ] || continue
 
     echo "Verifying services: $(basename "$file")"

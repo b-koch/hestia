@@ -4,7 +4,7 @@ set -ouex pipefail
 
 FAILED=0
 
-for file in /ctx/verify/packages/*; do
+for file in /ctx/packages/verify/*; do
     [ -f "$file" ] || continue
 
     echo "Verifying packages: $(basename "$file")"
