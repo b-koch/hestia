@@ -9,7 +9,7 @@ The goal is not to create a gaming distribution, but a dependable workstation en
 ## Switch to Hestia
 
 ```
-sudo bootc switch ghcr.io/b-koch/hestia
+sudo bootc switch --enforce-container-sigpolicy ghcr.io/b-koch/hestia
 ```
 
 ## Why "Hestia"?
