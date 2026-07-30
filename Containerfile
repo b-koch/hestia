@@ -7,7 +7,9 @@ COPY system_files /system_files
 # Universal Blue Images: https://github.com/orgs/ublue-os/packages
 FROM ghcr.io/ublue-os/bazzite-gnome:stable
 
-RUN rm -f /opt && sync && mkdir -p /opt
+RUN rm -f /opt
+RUN sleep 2
+RUN mkdir -p /opt
 
 ### MODIFICATIONS
 
