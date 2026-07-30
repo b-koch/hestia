@@ -126,6 +126,28 @@ jobs:
           df -h
           sudo du -sh /var/tmp || true
           sudo du -sh /var/lib/containers || true
+      
+      - name: Wait for stale containers
+        run: |
+          for i in {1..12}; do
+            if ! pgrep -x crun >/dev/null && ! pgrep -x conmon >/dev/null; then
+              echo "No stale container processes found"
+              exit 0
+            fi
+
+            echo "Waiting for container runtime cleanup..."
+            sleep 5
+          done
+
+          echo "Runtime still has processes:"
+          pgrep -a -x crun || true
+          pgrep -a -x conmon || true
+
+      - name: Reset Podman state
+        run: |
+          sudo podman ps -a
+          sudo podman rm -af || true
+          sudo systemctl restart podman.socket podman.service || true
 
       - name: Build Image
         id: build-image
@@ -136,8 +158,6 @@ jobs:
             "${IMAGE_NAME}" \
             "${DEFAULT_TAG}" \
             "${BASE_DIGEST}"
-
-
 
       - name: Cleanup before rechunk
         run: |
