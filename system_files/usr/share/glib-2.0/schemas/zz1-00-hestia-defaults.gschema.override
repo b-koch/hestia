@@ -71,3 +71,13 @@ move-to-workspace-right=['<Shift><Super>Right', '<Shift><Super>y']
 [org.gnome.settings-daemon.plugins.media-keys]
 volume-step=2
 
+[org.gnome.desktop.background]
+primary-color='#023c88'
+secondary-color='#5789ca'
+
+[org.gnome.desktop.interface]
+accent-color='blue'
+
+[org.gnome.desktop.screensaver]
+primary-color='#023c88'
+secondary-color='#5789ca'
