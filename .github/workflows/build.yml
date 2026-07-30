@@ -120,35 +120,7 @@ jobs:
         run: |
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
-      
-      - name: Disk usage before build
-        run: |
-          df -h
-          sudo du -sh /var/tmp || true
-          sudo du -sh /var/lib/containers || true
-      
-      - name: Wait for stale containers
-        run: |
-          for i in {1..12}; do
-            if ! pgrep -x crun >/dev/null && ! pgrep -x conmon >/dev/null; then
-              echo "No stale container processes found"
-              exit 0
-            fi
-
-            echo "Waiting for container runtime cleanup..."
-            sleep 5
-          done
-
-          echo "Runtime still has processes:"
-          pgrep -a -x crun || true
-          pgrep -a -x conmon || true
-
-      - name: Reset Podman state
-        run: |
-          sudo podman ps -a
-          sudo podman rm -af || true
-          sudo systemctl restart podman.socket podman.service || true
-
+           
       - name: Build Image
         id: build-image
         env:
@@ -159,33 +131,13 @@ jobs:
             "${DEFAULT_TAG}" \
             "${BASE_DIGEST}"
 
-      - name: Cleanup before rechunk
-        run: |
-          echo "Before cleanup:"
-          df -h
-          sudo podman system df -v
-          sudo podman images
-          sudo podman inspect hestia:latest
 
-          sudo podman builder prune -f
-
-          echo "After cleanup:"
-          df -h
-          sudo podman system df
-          sudo podman images
-
-      - name: Disk usage before rechunk
-        run: |
-          df -h
-          sudo du -sh /var/tmp || true
-          sudo du -sh /var/lib/containers || true
-
-      - name: Rechunk image
-        id: rechunk
-        run: |
-          sudo -E $(command -v just) rechunk \
-            ${IMAGE_NAME} \
-            ${DEFAULT_TAG}
+      # - name: Rechunk image
+      #   id: rechunk
+      #   run: |
+      #     sudo -E $(command -v just) rechunk \
+      #       ${IMAGE_NAME} \
+      #       ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
