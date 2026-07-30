@@ -10,6 +10,6 @@ for list in /ctx/packages/remove/*; do
     mapfile -t packages < <(read_list "$list")
 
     if [ "${#packages[@]}" -gt 0 ]; then
-        dnf5 remove -y --skip-unavailable "${packages[@]}" || true
+        dnf5 remove -y "${packages[@]}" || true
     fi
 done

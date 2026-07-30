@@ -8,14 +8,14 @@ virt-install
 virt-viewer
 
 # UEFI support
-edk2-ovmf
+#edk2-ovmf
 
 # TPM support (Windows 11, etc.)
 swtpm
 swtpm-tools
 
 # Networking
-dnsmasq
+#dnsmasq
 bridge-utils
 
 # Helpful CLI tools
