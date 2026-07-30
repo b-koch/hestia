@@ -37,5 +37,8 @@ echo "Disable repositories..."
 echo "Add Hestia branding..."
 /ctx/scripts/hestia_branding.sh
 
+echo "Build initramfs"
+/ctx/scripts/build-initramfs.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh

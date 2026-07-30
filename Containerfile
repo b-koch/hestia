@@ -30,8 +30,6 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build.sh
     
-RUN rpm-ostree initramfs --enable
-
 ### LINTING
 ## Verify final image and contents are correct.
 RUN bootc container lint
