@@ -24,7 +24,7 @@ This reflects the purpose of Hestia Linux:
 
 Hestia aims to be a stable home for:
 
-* myself
+* __myself__
 * software development
 * virtualization and testing
 * productivity workflows
