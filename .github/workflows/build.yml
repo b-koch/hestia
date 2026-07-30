@@ -146,7 +146,7 @@ jobs:
       - name: Rechunk image
         id: rechunk
         run: |
-          sudo -E $(command -v just) rechunk \
+          sudo -E $(command -v just) just ostree-rechunk \
             ${IMAGE_NAME} \
             ${DEFAULT_TAG}
 
