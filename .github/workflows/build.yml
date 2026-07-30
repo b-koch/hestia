@@ -137,6 +137,11 @@ jobs:
             "${DEFAULT_TAG}" \
             "${BASE_DIGEST}"
 
+      - name: Check image exists
+        run: |
+          sudo podman images
+          sudo podman inspect hestia:latest
+
       - name: Disk usage before rechunk
         run: |
           df -h
