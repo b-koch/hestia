@@ -1,5 +1,5 @@
 # Virtualization host
-@virtualization
+#@virtualization
 virt-manager
 libvirt
 qemu-kvm
