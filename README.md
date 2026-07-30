@@ -4,7 +4,7 @@ A reliable, production-focused desktop image built on top of Bazzite.
 
 Hestia is a personal Linux image designed for development, productivity, and everyday computing while retaining the gaming optimizations and hardware support that make Bazzite a strong foundation.
 
-The goal is not to create a gaming distribution, but a dependable workstation environment where development tools, virtual machines, creative applications, and games all work well together.
+The goal is not to create a gaming distribution, but a dependable workstation environment where development tools, virtual machines, creative applications, and games all work well togethe without a gaming branding.
 
 ## Switch to Hestia
 
@@ -134,7 +134,7 @@ gsettings get org.gnome.desktop.wm.keybindings move-to-workspace-right
 # Settings
 
 ```
-gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 1
+gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
 ```
