@@ -9,6 +9,9 @@ log() {
 
 log "Starting system cleanup"
 
+gtk-update-icon-cache -f /usr/share/icons/hicolor
+update-desktop-database /usr/share/applications
+
 # Remove autostart files
 # Example: rm /etc/skel/.config/autostart/steam.desktop
 
