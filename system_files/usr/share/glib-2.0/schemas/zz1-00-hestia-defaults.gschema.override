@@ -1,0 +1,73 @@
+[org.gnome.desktop.app-folders]
+folder-children=['Office', 'Graphics', 'Development', 'Audio&Video', 'Games', 'Education', 'Network', 'Science', 'Settings', 'System', 'Utilities', 'GamingUtilities', 'Containers', 'Misc', 'Wine', 'YaST', 'Pardus']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/]
+categories=['Office', 'WordProcessor', 'Spreadsheet', 'Presentation', 'Scanning']
+name='Office'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Development/]
+categories=['Development', 'IDE']
+name='Development'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Audio&Video/]
+categories=['AudioVideo', 'Audio', 'Video', 'Recorder']
+name='Audio & Video'
+apps=['com.blackmagicdesign.resolve.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Games/]
+categories=['Game']
+name='Games'
+excluded-apps=['wine-winemine.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Education/]
+categories=['Education']
+name='Education'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Network/]
+categories=['Network', 'WebBrowser', 'FileTransfer']
+name='Web'
+excluded-apps=['steam.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Science/]
+categories=['Science']
+name='Science'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Settings/]
+categories=['Settings']
+name='Settings'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/System/]
+categories=['System']
+name='System'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Utilities/]
+categories=['Utility']
+name='Utilities'
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Graphics/]
+categories=['Graphics', '2DGraphics', 'RasterGraphics']
+name='Graphics'
+excluded-apps=['org.gnome.Evince.desktop', 'simple-scan.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Wine/]
+categories=['X-Wine']
+name='Wine'
+apps=['wine-winemine.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Containers/]
+name='Containers'
+apps=['org.gnome.Boxes.desktop', 'virt-manager.desktop']
+
+[org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Misc/]
+name='Misc'
+apps=['com.blackmagicdesign.resolve-Panels.desktop', 'com.blackmagicdesign.resolve-Installer.desktop', 'com.blackmagicdesign.resolve-CaptureLogs.desktop']
+
+[org.gnome.desktop.wm.keybindings]
+switch-to-workspace-left=['<Super>Left', '<Super>less']
+switch-to-workspace-right=['<Super>Right', '<Super>y']
+move-to-workspace-left=['<Shift><Super>Left', '<Shift><Super>less']
+move-to-workspace-right=['<Shift><Super>Right', '<Shift><Super>y']
+
+[org.gnome.settings-daemon.plugins.media-keys]
+volume-step=2
+

@@ -25,12 +25,6 @@ echo "Installing fonts..."
 echo "Applying configuration..."
 /ctx/scripts/configure.sh
 
-echo "Verifying important packages, services and commands..."
-#/ctx/scripts/verify_packages.sh
-#/ctx/scripts/verify_services.sh
-#/ctx/scripts/verify_commands.sh
-#/ctx/scripts/verify_rpms.sh
-
 echo "Disable repositories..."
 /ctx/scripts/disable_repos.sh
 
