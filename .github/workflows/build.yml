@@ -143,12 +143,24 @@ jobs:
           sudo du -sh /var/tmp || true
           sudo du -sh /var/lib/containers || true
 
-      - name: Rechunk image
-        id: rechunk
+      - name: Cleanup before rechunk
         run: |
-          sudo -E $(command -v just) ostree-rechunk \
-            ${IMAGE_NAME} \
-            ${DEFAULT_TAG}
+          echo "Before cleanup:"
+          df -h
+          sudo podman system df -v
+
+          sudo podman builder prune -af
+
+          echo "After cleanup:"
+          df -h
+          sudo podman system df
+
+      # - name: Rechunk image
+      #   id: rechunk
+      #   run: |
+      #     sudo -E $(command -v just) rechunk \
+      #       ${IMAGE_NAME} \
+      #       ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
