@@ -34,5 +34,8 @@ echo "Add Hestia branding..."
 echo "Build initramfs"
 /ctx/scripts/build-initramfs.sh
 
+echo "Fixing Softmaker Office NX icons"
+/ctx/scripts/fix_softmaker_icons.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
