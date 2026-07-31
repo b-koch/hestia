@@ -9,8 +9,14 @@ log() {
 
 log "Starting system cleanup"
 
-gtk-update-icon-cache -f /usr/share/icons/hicolor
-update-desktop-database /usr/share/applications
+# Delete broken icon symlinks
+find /usr/share/icons -xtype l -delete
+
+for theme in /usr/share/icons/*/; do
+    if [ -f "${theme}/icon-theme.cache" ] || [ -d "${theme}/actions" ] || [ -d "${theme}/apps" ]; then
+        gtk-update-icon-cache -f -t "${theme}" || true
+    fi
+done
 
 # Remove autostart files
 # Example: rm /etc/skel/.config/autostart/steam.desktop
