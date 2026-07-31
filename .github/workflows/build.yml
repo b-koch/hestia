@@ -131,13 +131,37 @@ jobs:
             "${DEFAULT_TAG}" \
             "${BASE_DIGEST}"
 
+      - name: Free space after build
+        run: |
+          echo "--- Disk usage before cleanup ---"
+          df -h /
+          sudo podman system df
+          # Only removes dangling images / unreferenced build cache,
+          # never a currently-tagged image, so the image we just built is safe.
+          sudo podman system prune -f
+          echo "--- Disk usage after cleanup ---"
+          df -h /
+          sudo podman system df
 
-      # - name: Rechunk image
-      #   id: rechunk
-      #   run: |
-      #     sudo -E $(command -v just) rechunk \
-      #       ${IMAGE_NAME} \
-      #       ${DEFAULT_TAG}
+      - name: Rechunk image
+        id: rechunk
+        run: |
+          sudo -E $(command -v just) rechunk \
+            ${IMAGE_NAME} \
+            ${DEFAULT_TAG}
+
+      - name: Free space after rechunk
+        run: |
+          echo "--- Disk usage before cleanup ---"
+          df -h /
+          sudo podman system df
+          # chunkah re-tags the new image under the same name, which leaves the
+          # pre-chunk image dangling (untagged) - this is the big one, it reclaims
+          # a full copy of the pre-rechunk image.
+          sudo podman system prune -f
+          echo "--- Disk usage after cleanup ---"
+          df -h /
+          sudo podman system df
 
       - name: Generate Build Tags
         id: gen-build-tags
