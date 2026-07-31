@@ -132,12 +132,12 @@ jobs:
             "${BASE_DIGEST}"
 
 
-      # - name: Rechunk image
-      #   id: rechunk
-      #   run: |
-      #     sudo -E $(command -v just) rechunk \
-      #       ${IMAGE_NAME} \
-      #       ${DEFAULT_TAG}
+      - name: Rechunk image
+        id: rechunk
+        run: |
+          sudo -E $(command -v just) rechunk \
+            ${IMAGE_NAME} \
+            ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
