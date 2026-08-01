@@ -1,24 +1,21 @@
 name: Build container image
 on:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '0 */3 * * *'  # Runs every 3 hours
+  workflow_dispatch:
   push:
     branches:
       - main
+      - feature/sysext-migration
     paths-ignore:
       - '**/README.md'
       - '**/LICENSE'
+      - 'TODO.md'
       - 'tools/**'
-  workflow_dispatch:
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && github.sha || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,54 +24,26 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
-      base_digest: ${{ steps.check.outputs.base_digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Install just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - name: Check for non-sysext changes
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            core:
+              - '!sysext/**'
 
-      - name: Determine image tags
-        id: image-info
-        run: |
-          IMAGE_NAME=$(just image_name)
-          DEFAULT_TAG=$(just generate-default-tag)
-          IMAGE_REGISTRY="ghcr.io/${{ github.repository_owner }}"
-
-          echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
-          echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
-          echo "image_registry=${IMAGE_REGISTRY,,}" >> $GITHUB_OUTPUT
-
-      - name: Compare base vs custom image digest
+      - name: Decide whether to build
         id: check
         run: |
-          BASE_IMAGE="ghcr.io/ublue-os/bazzite-gnome:stable"
-          CUSTOM_IMAGE="${{ steps.image-info.outputs.image_registry }}/${{ steps.image-info.outputs.image_name }}:${{ steps.image-info.outputs.default_tag }}"
-
-          # Fetch current SHA256 digest of the upstream base image
-          BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
-          echo "base_digest=${BASE_DIGEST}" >> $GITHUB_OUTPUT
-
-          if [[ "${{ github.event_name }}" != "schedule" ]]; then
-            echo "Triggered by '${{ github.event_name }}'. Forcing build."
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "Scheduled run. Comparing base image digest..."
-
-          # Read stored base digest label from the custom image manifest
-          CUSTOM_BASE_DIGEST=$(skopeo inspect docker://$CUSTOM_IMAGE | jq -r '.Labels["org.opencontainers.image.base.digest"] // empty' 2>/dev/null || echo "")
-
-          echo "Current upstream base digest: ${BASE_DIGEST}"
-          echo "Stored base digest in custom: ${CUSTOM_BASE_DIGEST}"
-
-          if [[ "$BASE_DIGEST" != "$CUSTOM_BASE_DIGEST" ]]; then
-            echo "Base image digest has changed. Build required."
+          if [[ "${{ steps.filter.outputs.core }}" == "true" ]]; then
+            echo "Changes detected outside sysext/**. Building."
             echo "should_build=true" >> $GITHUB_OUTPUT
           else
-            echo "Base image digest matches. Skipping build."
+            echo "Only sysext/** files changed. Skipping container build."
             echo "should_build=false" >> $GITHUB_OUTPUT
           fi
 
@@ -123,21 +92,16 @@ jobs:
 
       - name: Build Image
         id: build-image
-        env:
-          BASE_DIGEST: ${{ needs.check_base.outputs.base_digest }}
         run: |
           sudo -E $(command -v just) build \
             "${IMAGE_NAME}" \
-            "${DEFAULT_TAG}" \
-            "${BASE_DIGEST}"
+            "${DEFAULT_TAG}"
 
       - name: Free space after build
         run: |
           echo "--- Disk usage before cleanup ---"
           df -h /
           sudo podman system df
-          # Only removes dangling images / unreferenced build cache,
-          # never a currently-tagged image, so the image we just built is safe.
           sudo podman system prune -f
           echo "--- Disk usage after cleanup ---"
           df -h /
@@ -149,19 +113,6 @@ jobs:
           sudo -E $(command -v just) rechunk \
             "${IMAGE_NAME}" \
             "${DEFAULT_TAG}"
-
-      - name: Free space after rechunk
-        run: |
-          echo "--- Disk usage before cleanup ---"
-          df -h /
-          sudo podman system df
-          # Catches any leftover dangling layers from the rechunk/tag steps.
-          # The rechunk recipe itself already drops the pre-chunk image and
-          # the intermediate archive as it goes.
-          sudo podman system prune -f
-          echo "--- Disk usage after cleanup ---"
-          df -h /
-          sudo podman system df
 
       - name: Generate Build Tags
         id: gen-build-tags
@@ -218,3 +169,15 @@ jobs:
           DIGEST: ${{ steps.push-image.outputs.digest }}
         run: |
           cosign sign -y --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${IMAGE_NAME}@${DIGEST}
+
+  trigger_sysext:
+    name: Trigger sysext build
+    needs: [check_base, build_push]
+    if: needs.build_push.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Trigger build-sysext workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run build-sysext.yml --repo ${{ github.repository }}

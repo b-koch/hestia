@@ -1,0 +1,1 @@
+SUBSYSTEM=="block", ENV{ID_PATH}=="*loop*", ATTRS{loop/backing_file}=="/var/lib/extensions/*", ENV{UDISKS_IGNORE}="1"

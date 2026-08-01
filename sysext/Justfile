@@ -1,0 +1,26 @@
+set dotenv-filename := "../image-template.env"
+set dotenv-load
+
+export repo_organization := env_var("REPO_ORGANIZATION")
+
+image_name := "hestia-sysext"
+registry := "ghcr.io/" + repo_organization
+
+[private]
+default:
+    @just --list
+
+# Build the sysext image (safe to run from anywhere)
+[group('Sysext')]
+build tag="latest":
+    #!/usr/bin/env bash
+    set -euox pipefail
+    podman build \
+        --tag "{{ registry }}/{{ image_name }}:{{ tag }}" \
+        --file "{{ justfile_directory() }}/Containerfile" \
+        "{{ justfile_directory() }}/.."
+
+# Push the sysext image to the registry
+[group('Sysext')]
+push tag="latest":
+    podman push "{{ registry }}/{{ image_name }}:{{ tag }}"
