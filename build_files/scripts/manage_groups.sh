@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-groupadd --system libvirt
-getent group libvirt
+if ! getent group libvirt > /dev/null; then
+    groupadd --system libvirt
+fi
