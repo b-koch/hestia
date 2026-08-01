@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! getent group libvirt > /dev/null; then
-    groupadd --system libvirt
-fi
+REQUIRED_GROUPS=(
+    libvirt
+)
+
+for group in "${REQUIRED_GROUPS[@]}"; do
+    if ! getent group "$group" > /dev/null; then
+        echo "Creating missing system group: $group"
+        groupadd --system "$group"
+    fi
+done
