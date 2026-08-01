@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# NOTE: intentionally not `-e` - one category failing to fetch should not
-# stop the others from being refreshed.
 
-# If you fork this repo, update REGISTRY to match your own GHCR namespace
-# (it mirrors REPO_ORGANIZATION in image-template.env).
 REGISTRY="ghcr.io/b-koch"
 IMAGE_PREFIX="hestia-sysext"
 TAG="${HESTIA_SYSEXT_TAG:-latest}"
@@ -29,7 +25,25 @@ while IFS= read -r category; do
     image="${REGISTRY}/${IMAGE_PREFIX}-${category}:${TAG}"
     raw_path="${EXT_DIR}/${category}.raw"
 
-    echo "=== Refreshing sysext '${category}' from ${image} ==="
+    echo "=== Checking sysext '${category}' ==="
+
+    # Get remote digest without pulling
+    remote_digest=$(skopeo inspect --format '{{.Digest}}' "docker://${image}" 2>/dev/null || echo "")
+    if [[ -z "$remote_digest" ]]; then
+        echo "  x Failed to inspect remote image ${image}, skipping."
+        failed_any=1
+        continue
+    fi
+
+    # Get local digest if the image exists locally
+    local_digest=$(podman image inspect --format '{{.Digest}}' "$image" 2>/dev/null || echo "")
+
+    if [[ "$local_digest" == "$remote_digest" && -f "$raw_path" ]]; then
+        echo "  - Up to date (${remote_digest:0:19}), skipping."
+        continue
+    fi
+
+    echo "  > Changes detected or missing local file. Pulling updates..."
 
     if ! podman pull --quiet "$image"; then
         echo "  x Failed to pull ${image}, leaving existing state untouched."
@@ -52,7 +66,6 @@ while IFS= read -r category; do
     fi
 
     podman rm "$ctr" >/dev/null 2>&1
-    # Drop the pulled image layer again - we only need the extracted .raw.
     podman rmi "$image" >/dev/null 2>&1 || true
 done < "$MANIFEST"
 
@@ -61,7 +74,6 @@ if [[ "$fetched_any" -eq 1 ]]; then
     systemctl enable --now systemd-sysext.service >/dev/null 2>&1 || true
     systemctl restart systemd-sysext.service
 
-    # Refresh caches for content that landed via sysext (icons/fonts/desktop files)
     update-desktop-database /usr/share/applications 2>/dev/null || true
     gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
     fc-cache -f 2>/dev/null || true
