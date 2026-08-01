@@ -32,27 +32,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check for non-sysext changes
+        uses: dorny/paths-filter@v4
         id: filter
-        shell: bash
-        run: |
-          # Get list of modified files compared to the last commit (or merge base)
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }})
-          else
-            # Fallback for workflow_dispatch or other events
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-          fi
-
-          # Check if any changed file does NOT start with sysext/
-          CORE_CHANGED="false"
-          while IFS= read -r file; do
-            if [[ -n "$file" && ! "$file" =~ ^sysext/ ]]; then
-              CORE_CHANGED="true"
-              break
-            fi
-          done <<< "$CHANGED_FILES"
-
-          echo "core=${CORE_CHANGED}" >> $GITHUB_OUTPUT
+        with:
+          filters: |
+            core:
+              - '!sysext/**'
 
       - name: Install just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
