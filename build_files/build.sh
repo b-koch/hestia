@@ -43,5 +43,8 @@ echo "Enabling services..."
 echo "Disable services..."
 /ctx/scripts/disable_services.sh
 
+echo "Manage groups..."
+/ctx/scripts/manage_groups.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
