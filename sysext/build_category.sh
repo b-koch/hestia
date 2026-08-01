@@ -54,6 +54,7 @@ fi
 if [ "${#packages[@]}" -gt 0 ]; then
     echo "Installing (${#packages[@]}): ${packages[*]}"
     dnf5 --installroot="$ROOTFS" --use-host-config --releasever="$RELEASEVER" \
+        --setopt=disable_excludes=* \
         --setopt=install_weak_deps=False -y install "${packages[@]}"
 else
     echo "No packages listed for ${CATEGORY}."
@@ -74,6 +75,7 @@ fi
 
 if [ "${#urls[@]}" -gt 0 ]; then
     dnf5 --installroot="$ROOTFS" --use-host-config --releasever="$RELEASEVER" \
+        --setopt=disable_excludes=* \
         -y install "${urls[@]}"
 else
     echo "No external RPM scripts for ${CATEGORY}."

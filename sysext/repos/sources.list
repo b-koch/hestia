@@ -1,4 +1,3 @@
 # destination filename|url
 softmaker.repo|https://shop.softmaker.com/repo/softmaker.repo
 vscode.repo|https://packages.microsoft.com/yumrepos/vscode/config.repo
-terra.repo|https://raw.githubusercontent.com/terrapkg/subatomic-repos/main/terra.repo

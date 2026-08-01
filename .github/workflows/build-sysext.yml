@@ -7,13 +7,8 @@ on:
       - feature/sysext-migration
     paths:
       - "sysext/**"
-      - "build_files/lib/**"
       - ".github/workflows/build-sysext.yml"
   workflow_dispatch:
-  schedule:
-    # Rebuild weekly so packages (vscode, heroic, filen-io, nerd-fonts, etc.)
-    # stay reasonably fresh even without a repo change.
-    - cron: "0 4 * * 1"
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
