@@ -7,7 +7,7 @@ COPY sysext /sysext
 # binaries/libraries stay ABI-compatible with what they'll be merged into
 # at runtime. If you bump the base image tag in the main Containerfile,
 # bump it here too.
-FROM ghcr.io/b-koch/hestia AS builder
+FROM ghcr.io/b-koch/hestia:stable AS builder
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
