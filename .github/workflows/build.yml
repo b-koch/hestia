@@ -78,12 +78,8 @@ jobs:
             echo "should_build=false" >> $GITHUB_OUTPUT
           fi
 
-  # Builds the image and, for anything other than a PR, hands it off to the
-  # rechunk_push job via a throwaway registry tag. This job's disk budget is
-  # only ever spent on the build itself - it never has to also hold a second,
-  # rechunked copy of the same image.
-  build:
-    name: Build image
+  build_push:
+    name: Build and push image
     needs: check_base
     if: needs.check_base.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
@@ -92,10 +88,6 @@ jobs:
       contents: read
       packages: write
       id-token: write
-
-    outputs:
-      image_name: ${{ steps.image-name.outputs.image_name }}
-      default_tag: ${{ steps.gen-default-tag.outputs.default_tag }}
 
     steps:
       - name: Checkout
@@ -117,19 +109,17 @@ jobs:
         run: |
           IMAGE_NAME=$(just image_name)
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
-          echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
 
       - name: Default Tag
         id: gen-default-tag
         run: |
           DEFAULT_TAG=$(just generate-default-tag)
           echo "DEFAULT_TAG=${DEFAULT_TAG}" >> $GITHUB_ENV
-          echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
 
       - name: Prepare environment
         run: |
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
-          echo "STAGING_TAG=prechunk-${{ github.run_id }}" >> ${GITHUB_ENV}
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
 
       - name: Build Image
         id: build-image
@@ -153,65 +143,6 @@ jobs:
           df -h /
           sudo podman system df
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push staging image
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        run: |
-          sudo -E podman push "${IMAGE_NAME}:${DEFAULT_TAG}" \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}:${STAGING_TAG}"
-
-  # Runs on its own fresh runner with a full, clean disk budget. Pulls the
-  # unchunked image the build job staged, rechunks it (which needs a second
-  # full copy of the image on disk), tags it with the real aliases, pushes,
-  # signs, and cleans up the staging tag.
-  rechunk_push:
-    name: Rechunk and push image
-    needs: build
-    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Maximize build space
-        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
-
-      - name: Install just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-
-      - name: Prepare environment
-        run: |
-          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
-          echo "IMAGE_NAME=${{ needs.build.outputs.image_name }}" >> ${GITHUB_ENV}
-          echo "DEFAULT_TAG=${{ needs.build.outputs.default_tag }}" >> ${GITHUB_ENV}
-          echo "STAGING_TAG=prechunk-${{ github.run_id }}" >> ${GITHUB_ENV}
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull staging image
-        run: |
-          sudo -E podman pull "${IMAGE_REGISTRY}/${IMAGE_NAME}:${STAGING_TAG}"
-          # Re-tag to the local reference name the Justfile recipes expect
-          sudo -E podman tag "${IMAGE_REGISTRY}/${IMAGE_NAME}:${STAGING_TAG}" "${IMAGE_NAME}:${DEFAULT_TAG}"
-
       - name: Rechunk image
         id: rechunk
         run: |
@@ -224,9 +155,9 @@ jobs:
           echo "--- Disk usage before cleanup ---"
           df -h /
           sudo podman system df
-          # chunkah re-tags the new image under the same name, which leaves the
-          # pre-chunk image dangling (untagged) - reclaiming it here frees a full
-          # copy of the pre-rechunk image before we push.
+          # Catches any leftover dangling layers from the rechunk/tag steps.
+          # The rechunk recipe itself already drops the pre-chunk image and
+          # the intermediate archive as it goes.
           sudo podman system prune -f
           echo "--- Disk usage after cleanup ---"
           df -h /
@@ -250,14 +181,23 @@ jobs:
             "${DEFAULT_TAG}" \
             "${ALIAS_TAGS}"
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Push To GHCR
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         id: push-image
         env:
           ALIAS_TAGS: ${{ steps.gen-build-tags.outputs.alias_tags }}
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            sudo -E podman push --digestfile=/tmp/digestfile "${IMAGE_NAME}:${tag}" "${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}"
+            sudo -E podman push --digestfile=/tmp/digestfile ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
           done
 
           digest=$(< /tmp/digestfile)
@@ -265,32 +205,16 @@ jobs:
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         with:
           cosign-release: 'v2.6.3'
 
       - name: Sign container image
         id: sign-image
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push-image.outputs.digest }}
         run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_REGISTRY}/${IMAGE_NAME}@${DIGEST}"
-
-      - name: Delete staging image
-        if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Best-effort cleanup of the throwaway pre-chunk tag so it doesn't
-          # accumulate in the package list. GITHUB_TOKEN doesn't always carry
-          # package-delete scope - if this step fails, prune old "prechunk-*"
-          # versions manually from the package settings on GHCR instead.
-          VERSION_ID=$(gh api "/user/packages/container/${IMAGE_NAME}/versions" \
-            --jq ".[] | select(.metadata.container.tags[]? == \"${STAGING_TAG}\") | .id" 2>/dev/null || true)
-          if [[ -n "${VERSION_ID}" ]]; then
-            gh api --method DELETE "/user/packages/container/${IMAGE_NAME}/versions/${VERSION_ID}"
-          else
-            echo "Could not resolve staging tag version id, skipping."
-          fi
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${IMAGE_NAME}@${DIGEST}

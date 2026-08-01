@@ -37,5 +37,11 @@ echo "Build initramfs"
 echo "Fixing Softmaker Office NX icons"
 /ctx/scripts/fix_softmaker_icons.sh
 
+echo "Enabling services..."
+/ctx/scripts/enable_services.sh
+
+echo "Disable services..."
+/ctx/scripts/disable_services.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
