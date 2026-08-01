@@ -9,12 +9,10 @@ COPY sysext /sysext
 # bump it here too.
 FROM ghcr.io/b-koch/hestia AS builder
 
-ARG CATEGORY
-
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/sysext/build_category.sh "${CATEGORY}"
+    /ctx/sysext/build_sysext.sh
 
 # Only the packaged .raw survives into the pushed image - the builder
 # stage (which contains a full bazzite-gnome root) is discarded.

@@ -22,9 +22,6 @@ echo "Add Hestia branding..."
 echo "Build initramfs"
 /ctx/scripts/build-initramfs.sh
 
-echo "Generating sysext category manifest..."
-/ctx/scripts/generate_sysext_manifest.sh
-
 echo "Disable services..."
 /ctx/scripts/disable_services.sh
 

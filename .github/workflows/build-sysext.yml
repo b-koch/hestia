@@ -1,11 +1,10 @@
-name: Build sysext images
+name: Build sysext image
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Build container image"]
-    types:
-      - completed
+  push:
+    paths:
+      - 'sysext/**'
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
@@ -16,30 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  discover:
-    name: Discover sysext categories
-    runs-on: ubuntu-24.04
-    outputs:
-      categories: ${{ steps.list.outputs.categories }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: List categories
-        id: list
-        run: |
-          categories=$(find sysext/categories -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R -s -c 'split("\n")[:-1]')
-          echo "categories=${categories}" >> "$GITHUB_OUTPUT"
-          echo "Found categories: ${categories}"
-
   build_push:
-    name: Build ${{ matrix.category }}
-    needs: discover
+    name: Build and push sysext
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        category: ${{ fromJson(needs.discover.outputs.categories) }}
 
     permissions:
       contents: read
@@ -60,8 +38,7 @@ jobs:
       - name: Build sysext image
         run: |
           podman build \
-            --build-arg "CATEGORY=${{ matrix.category }}" \
-            --tag "${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}:${DEFAULT_TAG}" \
+            --tag "${IMAGE_REGISTRY}/hestia-sysext:${DEFAULT_TAG}" \
             --file sysext/Containerfile \
             .
 
@@ -79,7 +56,7 @@ jobs:
         run: |
           set -euox pipefail
           DATE=$(date +%Y%m%d)
-          IMAGE="${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}"
+          IMAGE="${IMAGE_REGISTRY}/hestia-sysext"
           podman push --digestfile=/tmp/digestfile "${IMAGE}:${DEFAULT_TAG}"
           podman tag "${IMAGE}:${DEFAULT_TAG}" "${IMAGE}:${DATE}"
           podman push "${IMAGE}:${DATE}"
@@ -100,4 +77,4 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push-image.outputs.digest }}
         run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}@${DIGEST}"
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_REGISTRY}/hestia-sysext@${DIGEST}"
