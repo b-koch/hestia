@@ -172,8 +172,10 @@ jobs:
   trigger_sysext:
     name: Trigger sysext build
     needs: [check_base, build_push]
-    if: needs.build_push.result == 'success'
+    if: needs.check_base.outputs.should_build == 'false' || needs.build_push.result == 'success'
     runs-on: ubuntu-24.04
+    permissions:
+      actions: write
     steps:
       - name: Trigger build-sysext workflow
         env:

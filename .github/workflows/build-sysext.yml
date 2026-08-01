@@ -2,9 +2,6 @@ name: Build sysext image
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'sysext/**'
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
