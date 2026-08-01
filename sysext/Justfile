@@ -24,3 +24,4 @@ build tag="latest":
 [group('Sysext')]
 push tag="latest":
     podman push "{{ registry }}/{{ image_name }}:{{ tag }}"
+
