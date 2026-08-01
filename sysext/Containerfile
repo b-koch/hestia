@@ -1,0 +1,22 @@
+# Allow build scripts to be referenced without being copied into the final image
+FROM scratch AS ctx
+COPY lib /lib
+COPY sysext /sysext
+
+# Built against the same base as the main Hestia image so the resulting
+# binaries/libraries stay ABI-compatible with what they'll be merged into
+# at runtime. If you bump the base image tag in the main Containerfile,
+# bump it here too.
+FROM ghcr.io/b-koch/hestia AS builder
+
+ARG CATEGORY
+
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/sysext/build_category.sh "${CATEGORY}"
+
+# Only the packaged .raw survives into the pushed image - the builder
+# stage (which contains a full bazzite-gnome root) is discarded.
+FROM scratch
+COPY --from=builder /out/sysext.raw /sysext.raw

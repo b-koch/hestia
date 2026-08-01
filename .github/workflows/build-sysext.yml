@@ -1,0 +1,110 @@
+name: Build sysext images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "sysext/**"
+      - "build_files/lib/**"
+      - ".github/workflows/build-sysext.yml"
+  workflow_dispatch:
+  schedule:
+    # Rebuild weekly so packages (vscode, heroic, filen-io, nerd-fonts, etc.)
+    # stay reasonably fresh even without a repo change.
+    - cron: "0 4 * * 1"
+
+env:
+  IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
+  DEFAULT_TAG: "latest"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover sysext categories
+    runs-on: ubuntu-24.04
+    outputs:
+      categories: ${{ steps.list.outputs.categories }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: List categories
+        id: list
+        run: |
+          categories=$(find sysext/categories -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R -s -c 'split("\n")[:-1]')
+          echo "categories=${categories}" >> "$GITHUB_OUTPUT"
+          echo "Found categories: ${categories}"
+
+  build_push:
+    name: Build ${{ matrix.category }}
+    needs: discover
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        category: ${{ fromJson(needs.discover.outputs.categories) }}
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+      - name: Prepare environment
+        run: |
+          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> "${GITHUB_ENV}"
+
+      - name: Build sysext image
+        run: |
+          podman build \
+            --build-arg "CATEGORY=${{ matrix.category }}" \
+            --tag "${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}:${DEFAULT_TAG}" \
+            --file sysext/Containerfile \
+            .
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        id: push-image
+        run: |
+          set -euox pipefail
+          DATE=$(date +%Y%m%d)
+          IMAGE="${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}"
+          podman push --digestfile=/tmp/digestfile "${IMAGE}:${DEFAULT_TAG}"
+          podman tag "${IMAGE}:${DEFAULT_TAG}" "${IMAGE}:${DATE}"
+          podman push "${IMAGE}:${DATE}"
+
+          digest=$(< /tmp/digestfile)
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        if: github.event_name != 'pull_request'
+        with:
+          cosign-release: "v2.6.3"
+
+      - name: Sign sysext image
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: false
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          DIGEST: ${{ steps.push-image.outputs.digest }}
+        run: |
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY "${IMAGE_REGISTRY}/hestia-sysext-${{ matrix.category }}@${DIGEST}"

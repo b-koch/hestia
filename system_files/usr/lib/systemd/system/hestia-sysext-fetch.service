@@ -1,0 +1,10 @@
+[Unit]
+Description=Fetch and refresh Hestia sysext extensions
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/usr/lib/hestia/sysext-categories.list
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/hestia-sysext-fetch.sh
+TimeoutStartSec=600

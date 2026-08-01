@@ -1,6 +1,10 @@
 set dotenv-filename := "image-template.env"
 set dotenv-load
 
+# Recipes for building/pushing the systemd-sysext category images.
+# Usage: just sysext build-all | just sysext push dev-tools latest
+mod sysext "sysext/Justfile"
+
 export image_name := env_var("IMAGE_NAME")
 export repo_organization := env_var("REPO_ORGANIZATION")
 export image_desc := env_var("IMAGE_DESC")
@@ -27,6 +31,8 @@ check:
     done
     echo "Checking syntax: Justfile"
     just --unstable --fmt --check -f Justfile
+    echo "Checking syntax: sysext/Justfile"
+    just --unstable --fmt --check -f sysext/Justfile
 
 # Fix Just Syntax
 [group('Just')]
@@ -38,6 +44,8 @@ fix:
     done
     echo "Checking syntax: Justfile"
     just --unstable --fmt -f Justfile || { exit 1; }
+    echo "Checking syntax: sysext/Justfile"
+    just --unstable --fmt -f sysext/Justfile || { exit 1; }
 
 # Clean Repo
 [group('Utility')]

@@ -2,6 +2,11 @@
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
+COPY lib /lib
+
+# Only used to read the category *names* (for the sysext manifest) - the
+# package lists/build logic inside sysext/ never run as part of this build.
+COPY sysext/categories /sysext-categories
 
 # Base Image
 # Universal Blue Images: https://github.com/orgs/ublue-os/packages

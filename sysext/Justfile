@@ -1,0 +1,55 @@
+set dotenv-filename := "../image-template.env"
+set dotenv-load
+
+export repo_organization := env_var("REPO_ORGANIZATION")
+
+image_prefix := "hestia-sysext"
+registry := "ghcr.io/" + repo_organization
+
+[private]
+default:
+    @just --list
+
+# List every sysext category defined under categories/
+[group('Sysext')]
+list-categories:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for dir in categories/*/; do
+        [ -d "$dir" ] || continue
+        basename "$dir"
+    done
+
+# Build one sysext category image (safe to run from anywhere)
+[group('Sysext')]
+build category tag="latest":
+    #!/usr/bin/env bash
+    set -euox pipefail
+    podman build \
+        --build-arg "CATEGORY={{ category }}" \
+        --tag "{{ registry }}/{{ image_prefix }}-{{ category }}:{{ tag }}" \
+        --file "{{ justfile_directory() }}/Containerfile" \
+        "{{ justfile_directory() }}/.."
+
+# Build every sysext category image
+[group('Sysext')]
+build-all tag="latest":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for category in $(just --justfile {{ justfile() }} list-categories); do
+        just --justfile {{ justfile() }} build "$category" "{{ tag }}"
+    done
+
+# Push one sysext category image to the registry
+[group('Sysext')]
+push category tag="latest":
+    podman push "{{ registry }}/{{ image_prefix }}-{{ category }}:{{ tag }}"
+
+# Push every sysext category image to the registry
+[group('Sysext')]
+push-all tag="latest":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for category in $(just --justfile {{ justfile() }} list-categories); do
+        just --justfile {{ justfile() }} push "$category" "{{ tag }}"
+    done
