@@ -4,4 +4,3 @@ virt-install
 virt-manager
 edk2-ovmf
 swtpm
-virtio-win
