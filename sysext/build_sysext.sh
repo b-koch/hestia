@@ -134,13 +134,6 @@ for overlay in /ctx/sysext/categories/*/overlay; do
 done
 
 
-echo "--- Applying SELinux labels ---"
-
-setfiles -F \
-    /etc/selinux/targeted/contexts/files/file_contexts \
-    "$ROOTFS"
-    
-
 echo "--- Writing extension metadata ---"
 
 mkdir -p "$ROOTFS/usr/lib/extension-release.d"
@@ -170,11 +163,11 @@ rm -rf "$ROOTFS/usr/share/info"
 rm -rf "$ROOTFS/usr/share/licenses"
 
 
-echo "--- Building SquashFS ---"
+echo "--- Building EROFS ---"
 
-dnf5 -y install erofs-utils >/dev/null
+dnf5 -y install erofs-utils selinux-policy-targeted >/dev/null
 
-mkfs.erofs -zzstd "$OUT" "$ROOTFS"
+mkfs.erofs -zzstd --file-contexts=/etc/selinux/targeted/contexts/files/file_contexts "$OUT" "$ROOTFS"
 
 echo "=== Built Hestia sysext ==="
 du -h "$OUT"
