@@ -22,7 +22,8 @@
       "matchFileNames": ["Containerfile"],
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["digest"],
-      "automerge": true
+      "automerge": true,
+      "platformAutomerge": true
     },
   ]
 }
