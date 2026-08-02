@@ -1,12 +1,14 @@
 name: Build sysext images
 on:
-  push:
+  schedule:
+    - cron: '0 6 * * 6'
+  pull_request:
     branches:
       - main
     paths:
       - 'sysext/**'
       - '.github/workflows/sysext.yml'
-  pull_request:
+  push:
     branches:
       - main
     paths:

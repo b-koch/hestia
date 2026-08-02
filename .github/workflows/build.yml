@@ -1,10 +1,10 @@
 name: Build container image
 on:
+  schedule:
+    - cron: '0 4 * * 6'
   pull_request:
     branches:
       - main
-  schedule:
-    - cron: '0 4 * * 6'
   push:
     branches:
       - main
