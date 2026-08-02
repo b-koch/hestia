@@ -1,6 +1,10 @@
 set dotenv-filename := "image-template.env"
 set dotenv-load
 
+# Recipes for building/pushing the systemd-sysext category images.
+# Usage: just sysext build-all | just sysext push dev-tools latest
+mod sysext "sysext/Justfile"
+
 export image_name := env_var("IMAGE_NAME")
 export repo_organization := env_var("REPO_ORGANIZATION")
 export image_desc := env_var("IMAGE_DESC")
@@ -27,6 +31,8 @@ check:
     done
     echo "Checking syntax: Justfile"
     just --unstable --fmt --check -f Justfile
+    echo "Checking syntax: sysext/Justfile"
+    just --unstable --fmt --check -f sysext/Justfile
 
 # Fix Just Syntax
 [group('Just')]
@@ -38,6 +44,8 @@ fix:
     done
     echo "Checking syntax: Justfile"
     just --unstable --fmt -f Justfile || { exit 1; }
+    echo "Checking syntax: sysext/Justfile"
+    just --unstable --fmt -f sysext/Justfile || { exit 1; }
 
 # Clean Repo
 [group('Utility')]
@@ -121,6 +129,17 @@ rechunk $target_image=image_name $tag=default_tag:
     set -xeuo pipefail
 
     export CHUNKAH_CONFIG_STR=$(podman inspect "${target_image}")
+
+    # Piping chunkah straight into `podman load` keeps the pre-chunk image AND
+    # the new rechunked copy on disk at the same time for the whole operation.
+    # Writing to a file lets us drop the pre-chunk image in between instead.
+    ARCHIVE=$(mktemp -t chunkah-archive.XXXXXXXXXX.tar)
+    trap 'rm -f "${ARCHIVE}"' EXIT
+
+    echo "--- Disk usage before rechunk ---"
+    df -h /
+    podman system df
+
     podman run --rm --mount=type=image,src="${target_image}",target=/chunkah \
     -e CHUNKAH_CONFIG_STR quay.io/coreos/chunkah:latest \
     build \
@@ -129,7 +148,25 @@ rechunk $target_image=image_name $tag=default_tag:
     --max-layers 128 \
     --prune /sysroot/ \
     --label ostree.commit- --label ostree.final-diffid- \
-    --tag "${target_image}:${tag}" | podman load
+    --tag "${target_image}:${tag}" > "${ARCHIVE}"
+
+    # chunkah has now fully read the pre-chunk image into the archive above -
+    # it's no longer needed, so drop it before loading the new copy back in.
+    podman rmi -f "${target_image}:${tag}"
+
+    echo "--- Disk usage after dropping pre-chunk image, before load ---"
+    df -h /
+    podman system df
+
+    podman load -i "${ARCHIVE}"
+
+    # Archive is loaded into local storage now, reclaim its space too
+    # (also handled by the trap above if anything fails before this point).
+    rm -f "${ARCHIVE}"
+
+    echo "--- Disk usage after rechunk ---"
+    df -h /
+    podman system df
 
 # Split the image for smaller updates (Classical)!
 ostree-rechunk $target_image=image_name $tag=default_tag:

@@ -141,6 +141,52 @@ gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'no
 
 ---
 
+# Extra software via systemd-sysext
+
+To keep the base image (and the GitHub runner rechunking it) small, Hestia does **not** `dnf5 install` optional software into the bootc image anymore. Instead, everything beyond a lean base + branding is shipped as [systemd system extensions](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html) (sysexts): read-only `/usr`-overlay images that are merged on top of the running system by `systemd-sysext.service`.
+
+## Layout
+
+Both halves of the build live in this repo:
+
+* `build_files/`, `system_files/`, `Containerfile` - the base Hestia bootc image (removals, branding, config, minimal essentials). This is what `just build` builds and what gets rechunked.
+* `sysext/` - one subdirectory per "category" under `sysext/categories/*`, each with its own `packages/install`, `rpms/install`, `fonts/install`, an optional `overlay/` (static files merged verbatim into `/usr`) and an optional `postprocess.sh`. Each category is built as its **own** container image (`sysext/Containerfile`, parameterized with `--build-arg CATEGORY=<name>`) and pushed to `ghcr.io/<org>/hestia-sysext-<category>`. The build never touches or rechunks the base image, so it can't cause the disk-space problems full package installs used to cause during the base image's rechunk step.
+
+Current categories: `dev-tools` (VS Code, Typst, file-roller, Heroic, Filen), `virtualization` (QEMU/KVM, libvirt, virt-manager), `fonts` (CJK fonts, AdwaitaMono Nerd Font), `productivity` (SoftMaker Office NX, Papirus icons).
+
+## How it's wired together
+
+1. At base-image build time, `build_files/scripts/generate_sysext_manifest.sh` scans `sysext/categories/*` and writes the category *names* (nothing else) into `/usr/lib/hestia/sysext-categories.list` inside the image. The base image only ever needs to know the category names, not their contents.
+2. `hestia-sysext-fetch.timer` (enabled by default) runs `/usr/libexec/hestia-sysext-fetch.sh` shortly after boot and then daily. For each category in the manifest, it pulls `ghcr.io/b-koch/hestia-sysext-<category>:latest` with `podman`, extracts the packaged `.raw` file, drops it into `/var/lib/extensions.d/`, symlinks it into `/var/lib/extensions/`, and refreshes `systemd-sysext.service`.
+3. `system_files/etc/udev/rules.d/99-hide-sysext.rules` hides the resulting loop devices from GNOME Files/Disks.
+4. `system_files/usr/lib/sysusers.d/90-hestia.conf` still creates the `libvirt` group in the *base* image even though the `libvirt` package itself now lives in the `virtualization` sysext - group/user creation is cheap and belongs in the base, package payloads don't.
+5. Since a sysext can only merge `/usr` (and `/opt`), services that need to be started automatically (like `libvirtd`) ship an `Upholds=` drop-in under `usr/lib/systemd/system/multi-user.target.d/` inside the sysext itself (see `sysext/categories/virtualization/overlay/`), instead of relying on an `/etc` enablement symlink.
+
+## Building/pushing sysexts locally
+
+```
+just sysext list-categories
+just sysext build dev-tools latest
+just sysext build-all latest
+just sysext push-all latest
+```
+
+`.github/workflows/build-sysext.yml` does the same per-category in CI (matrix build, one small job per category) on pushes to `sysext/**`, on a weekly schedule (to pick up upstream package/RPM updates), and on manual dispatch.
+
+## Adding a new category
+
+1. `mkdir -p sysext/categories/<name>/packages/install` and drop a plain-text package list in there (one package per line, `#` comments allowed) - or `rpms/install/*.sh` for scripts that print an RPM URL, or `fonts/install/*.sh` for scripts that populate `$ROOTFS/usr/share/fonts/...`, or `overlay/` for static files, or an executable `postprocess.sh` that receives `$ROOTFS`.
+2. Rebuild the base image once so the new category name lands in `/usr/lib/hestia/sysext-categories.list`.
+3. `just sysext build <name> latest && just sysext push <name> latest` (or just let CI do it).
+
+## Caveats
+
+* Sysexts are built `FROM ghcr.io/ublue-os/bazzite-gnome:stable` (same as the base image) so their binaries/libraries stay ABI-compatible with the running system. If the base image's Fedora release changes, rebuild the sysexts too.
+* Sysexts only overlay `/usr` and `/opt` - they can't add users/groups, write `/etc` config, or run `%post` scriptlets against the live system. Anything like that needs to go in the base image (`system_files/`) instead, same as the `libvirt` group above.
+* `hestia-sysext-fetch.sh` is best-effort: a failed pull for one category doesn't stop the others, and a fresh install/first boot without network connectivity simply runs without the extras until the timer succeeds.
+
+---
+
 # image-template
 
 This image is based on the [ublue-os image template](https://github.com/ublue-os/image-template).

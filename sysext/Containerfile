@@ -1,0 +1,23 @@
+# Build context for this Containerfile is this sysext/ directory itself
+# (not the repo root) -- see Justfile / README.md.
+
+FROM scratch AS ctx
+COPY lib /sysext/lib
+COPY apps /sysext/apps
+COPY build-sysext.sh /sysext/build-sysext.sh
+
+# Build against our own image so packages resolve against exactly what's
+# already installed on the target system (same Fedora release, same repos).
+FROM ghcr.io/b-koch/hestia:latest AS builder
+ARG APP
+
+RUN --mount=type=bind,from=ctx,source=/sysext,target=/sysext \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=tmpfs,dst=/tmp \
+    bash /sysext/build-sysext.sh "${APP}"
+
+# The final image's rootfs IS the sysext payload: pulling this image and
+# extracting it (podman create + podman cp) on the client gives exactly the
+# directory layout systemd-sysext expects under /var/lib/extensions/<app>/.
+FROM scratch
+COPY --from=builder /out/ /
