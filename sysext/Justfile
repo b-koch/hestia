@@ -2,25 +2,53 @@ set dotenv-filename := "../image-template.env"
 set dotenv-load
 
 export repo_organization := env_var("REPO_ORGANIZATION")
-
-image_name := "hestia-sysext"
 registry := "ghcr.io/" + repo_organization
 
 [private]
 default:
     @just --list
 
-# Build the sysext image (safe to run from anywhere)
+# List available sysext apps (directories under apps/)
 [group('Sysext')]
-build tag="latest":
+list:
     #!/usr/bin/env bash
-    set -euox pipefail
-    podman build \
-        --tag "{{ registry }}/{{ image_name }}:{{ tag }}" \
-        --file "{{ justfile_directory() }}/Containerfile" \
-        "{{ justfile_directory() }}/.."
+    set -euo pipefail
+    for d in "{{ justfile_directory() }}"/apps/*/; do
+        basename "$d"
+    done
 
-# Push the sysext image to the registry
+# Build a single sysext app image. Usage: just build bitwarden
 [group('Sysext')]
-push tag="latest":
-    podman push "{{ registry }}/{{ image_name }}:{{ tag }}"
+build app tag="latest":
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    podman build \
+        --build-arg APP={{ app }} \
+        --tag "{{ registry }}/sysext-{{ app }}:{{ tag }}" \
+        --file "{{ justfile_directory() }}/Containerfile" \
+        "{{ justfile_directory() }}"
+
+# Push a single sysext app image. Usage: just push bitwarden
+[group('Sysext')]
+push app tag="latest":
+    podman push "{{ registry }}/sysext-{{ app }}:{{ tag }}"
+
+# Build every app under apps/
+[group('Sysext')]
+build-all tag="latest":
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    for app_dir in "{{ justfile_directory() }}"/apps/*/; do
+        app="$(basename "$app_dir")"
+        just --justfile "{{ justfile() }}" build "$app" {{ tag }}
+    done
+
+# Push every app under apps/
+[group('Sysext')]
+push-all tag="latest":
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    for app_dir in "{{ justfile_directory() }}"/apps/*/; do
+        app="$(basename "$app_dir")"
+        just --justfile "{{ justfile() }}" push "$app" {{ tag }}
+    done

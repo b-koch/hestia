@@ -1,77 +1,95 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="ghcr.io/b-koch/hestia-sysext:${HESTIA_SYSEXT_TAG:-latest}"
-EXT_DIR="/var/lib/extensions/hestia"
-DIGEST_PATH="/var/lib/extensions.d/hestia.digest"
+APPS_LIST="/etc/hestia/sysext-apps.list"
+REGISTRY="ghcr.io/b-koch"
+TAG="${HESTIA_SYSEXT_TAG:-latest}"
+EXT_BASE="/var/lib/extensions"
+DIGEST_DIR="/var/lib/extensions.d"
 
-mkdir -p /var/lib/extensions.d /var/lib/extensions
+mkdir -p "$DIGEST_DIR" "$EXT_BASE"
 
-echo "=== Checking sysext ==="
-
-remote_digest=$(skopeo inspect --format '{{.Digest}}' "docker://${IMAGE}" 2>/dev/null || echo "")
-if [[ -z "$remote_digest" ]]; then
-    echo "  x Failed to inspect remote image ${IMAGE}, skipping."
-    exit 1
-fi
-
-local_digest=""
-if [[ -f "$DIGEST_PATH" ]]; then
-    local_digest=$(<"$DIGEST_PATH")
-fi
-
-if [[ "$local_digest" == "$remote_digest" && -d "$EXT_DIR" ]]; then
-    echo "  - Up to date (${remote_digest:0:19}), skipping."
+if [[ ! -f "$APPS_LIST" ]]; then
+    echo "No sysext app list found at ${APPS_LIST}, nothing to do."
     exit 0
 fi
 
-echo "  > Changes detected or missing local files. Pulling updates..."
+mapfile -t apps < <(grep -vE '^[[:space:]]*(#|$)' "$APPS_LIST")
 
-if ! podman pull --quiet "$IMAGE"; then
-    echo "  x Failed to pull ${IMAGE}, leaving existing state untouched."
-    exit 1
+if [[ "${#apps[@]}" -eq 0 ]]; then
+    echo "Sysext app list is empty, nothing to do."
+    exit 0
 fi
 
-systemctl stop systemd-sysext.service 2>/dev/null || true
+changed=0
 
-tmp_dir="$(mktemp -d)"
+for app in "${apps[@]}"; do
+    image="${REGISTRY}/sysext-${app}:${TAG}"
+    ext_dir="${EXT_BASE}/${app}"
+    digest_path="${DIGEST_DIR}/${app}.digest"
 
-ctr="$(podman create "$IMAGE")" || {
-    echo "  x podman create failed"
-    rm -rf "$tmp_dir"
-    exit 1
-}
+    echo "=== Checking sysext: ${app} ==="
 
-if podman cp "${ctr}:/." "$tmp_dir/"; then
-    rm -rf "$EXT_DIR"
-    mv "$tmp_dir" "$EXT_DIR"
-    
-    # Fix SELinux contexts across all subdirectories using path substitution
-    if command -v restorecon >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
-        echo "  > Relabeling SELinux contexts..."
-        restorecon -R -F -s "${EXT_DIR}/usr"=/usr "${EXT_DIR}"
-        if [[ -d "${EXT_DIR}/opt" ]]; then
-            restorecon -R -F -s "${EXT_DIR}/opt"=/opt "${EXT_DIR}/opt"
-        fi
+    remote_digest=$(skopeo inspect --format '{{.Digest}}' "docker://${image}" 2>/dev/null || echo "")
+    if [[ -z "$remote_digest" ]]; then
+        echo "  x Failed to inspect remote image ${image}, skipping."
+        continue
     fi
 
-    printf '%s\n' "$remote_digest" > "$DIGEST_PATH"
-    echo "  + Installed hestia sysext directory directly to ${EXT_DIR}"
+    local_digest=""
+    if [[ -f "$digest_path" ]]; then
+        local_digest=$(<"$digest_path")
+    fi
+
+    if [[ "$local_digest" == "$remote_digest" && -d "$ext_dir" ]]; then
+        echo "  - Up to date (${remote_digest:0:19}), skipping."
+        continue
+    fi
+
+    echo "  > Changes detected or missing local files. Pulling updates..."
+
+    if ! podman pull --quiet "$image"; then
+        echo "  x Failed to pull ${image}, leaving existing state untouched."
+        continue
+    fi
+
+    tmp_dir="$(mktemp -d -p "$EXT_BASE")"
+
+    ctr="$(podman create "$image")" || {
+        echo "  x podman create failed for ${app}"
+        rm -rf "$tmp_dir"
+        continue
+    }
+
+    if podman cp "${ctr}:/." "$tmp_dir/"; then
+        rm -rf "$ext_dir"
+        mv "$tmp_dir" "$ext_dir"
+
+        if command -v restorecon >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
+            echo "  > Relabeling SELinux contexts..."
+            restorecon -R -F -s "${ext_dir}/usr"=/usr "${ext_dir}"
+        fi
+
+        printf '%s\n' "$remote_digest" > "$digest_path"
+        echo "  + Installed ${app} to ${ext_dir}"
+        changed=1
+    else
+        echo "  x Failed to extract files from ${image}"
+        rm -rf "$tmp_dir"
+    fi
+
+    podman rm "$ctr" >/dev/null 2>&1 || true
+done
+
+if [[ "$changed" -eq 1 ]]; then
+    systemctl daemon-reload
+    systemctl restart systemd-sysext.service
+
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+    gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+    fc-cache -f 2>/dev/null || true
+
+    echo "Sysext refresh complete."
 else
-    echo "  x Failed to extract files from ${IMAGE}"
-    rm -rf "$tmp_dir"
-    podman rm "$ctr" >/dev/null 2>&1
-    exit 1
+    echo "No sysext changes."
 fi
-
-podman rm "$ctr" >/dev/null 2>&1
-
-systemctl daemon-reload
-systemctl enable --now systemd-sysext.service >/dev/null 2>&1 || true
-systemctl restart systemd-sysext.service
-
-update-desktop-database /usr/share/applications 2>/dev/null || true
-gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
-fc-cache -f 2>/dev/null || true
-
-echo "Sysext refresh complete."
