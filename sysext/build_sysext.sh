@@ -134,6 +134,13 @@ for overlay in /ctx/sysext/categories/*/overlay; do
 done
 
 
+echo "--- Applying SELinux labels ---"
+
+setfiles -F \
+    /etc/selinux/targeted/contexts/files/file_contexts \
+    "$ROOTFS"
+    
+
 echo "--- Writing extension metadata ---"
 
 mkdir -p "$ROOTFS/usr/lib/extension-release.d"
