@@ -15,3 +15,5 @@ scripts
 json
 /.dnf-cache/
 /docs/*/
+# Local EROFS sysext build output
+/sysext/dist/

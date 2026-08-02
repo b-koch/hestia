@@ -44,6 +44,18 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
 
+      # Needed to pack the relabeled rootfs into the .raw sysext image that
+      # ships to hosts (see sysext/relabel-and-pack.sh).
+      - name: Install erofs-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y erofs-utils
+
+      # Needed to push/pull the .raw file as a plain OCI artifact -- it's
+      # not a container image, just a single signed blob.
+      - name: Install oras
+        uses: oras-project/setup-oras@8d34698a59f5ffe24821f0b48ab62a3de8b64b20 # v1
+
       - name: Prepare environment
         run: |
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
@@ -64,7 +76,7 @@ jobs:
         with:
           cosign-release: 'v3.1.2'
 
-      - name: Build, push and sign each sysext app
+      - name: Build, relabel, pack, push and sign each sysext app
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
@@ -73,20 +85,32 @@ jobs:
           for app_dir in sysext/apps/*/; do
             app="$(basename "${app_dir}")"
 
-            echo "=== ${app} ==="
+            echo "=== ${app}: build ==="
             sudo -E "$(command -v just)" --justfile sysext/Justfile build "${app}" "${DEFAULT_TAG}"
 
-            # Pull requests only validate that every app still builds.
+            # Relabel SELinux contexts against our own image's real policy
+            # and pack into an EROFS .raw image. This runs for PRs too --
+            # it operates on the locally-built image tag, no registry
+            # credentials needed, and validates the whole pipeline still
+            # works before merge.
+            echo "=== ${app}: relabel + pack ==="
+            sudo -E "$(command -v just)" --justfile sysext/Justfile pack "${app}" "${DEFAULT_TAG}"
+
+            # Pull requests only validate that every app still builds and
+            # packs cleanly.
             if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
               continue
             fi
 
-            sudo -E podman push \
-              --digestfile=/tmp/digestfile \
-              "${IMAGE_REGISTRY}/sysext-${app}:${DEFAULT_TAG}"
+            raw="sysext/dist/sysext-${app}-${DEFAULT_TAG}.raw"
 
-            digest="$(< /tmp/digestfile)"
+            echo "=== ${app}: push raw sysext artifact ==="
+            oras push "${IMAGE_REGISTRY}/sysext-${app}-raw:${DEFAULT_TAG}" \
+              --artifact-type application/vnd.hestia.sysext.erofs \
+              "${raw}:application/octet-stream" \
+              > /tmp/oras-push.log
+            digest="$(grep -oP 'Digest: \K.*' /tmp/oras-push.log)"
 
             cosign sign -y --key env://COSIGN_PRIVATE_KEY \
-              "${IMAGE_REGISTRY}/sysext-${app}@${digest}"
+              "${IMAGE_REGISTRY}/sysext-${app}-raw@${digest}"
           done

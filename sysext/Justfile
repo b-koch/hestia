@@ -33,6 +33,19 @@ build app tag="latest":
 push app tag="latest":
     podman push "{{ registry }}/sysext-{{ app }}:{{ tag }}"
 
+# Relabel SELinux contexts (against our own image's real policy) and pack
+# the already-built app into a signed EROFS .raw sysext image under dist/.
+# Must run as root/sudo, and must run after `build`.
+[group('Sysext')]
+pack app tag="latest":
+    sudo REGISTRY="{{ registry }}" bash "{{ justfile_directory() }}/relabel-and-pack.sh" "{{ app }}" "{{ tag }}"
+
+# Build then pack in one go. Usage: just build-and-pack bitwarden
+[group('Sysext')]
+build-and-pack app tag="latest":
+    just --justfile "{{ justfile() }}" build "{{ app }}" "{{ tag }}"
+    just --justfile "{{ justfile() }}" pack "{{ app }}" "{{ tag }}"
+
 # Build every app under apps/
 [group('Sysext')]
 build-all tag="latest":
@@ -51,4 +64,14 @@ push-all tag="latest":
     for app_dir in "{{ justfile_directory() }}"/apps/*/; do
         app="$(basename "$app_dir")"
         just --justfile "{{ justfile() }}" push "$app" {{ tag }}
+    done
+
+# Pack every already-built app under apps/ into dist/*.raw
+[group('Sysext')]
+pack-all tag="latest":
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    for app_dir in "{{ justfile_directory() }}"/apps/*/; do
+        app="$(basename "$app_dir")"
+        just --justfile "{{ justfile() }}" pack "$app" {{ tag }}
     done

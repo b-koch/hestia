@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Fetches image-mode systemd-sysext extensions: each app is shipped as a
+# single EROFS .raw file, already relabeled with the correct SELinux
+# contexts at build time (see sysext/relabel-and-pack.sh). There is
+# deliberately no relabeling here: the labels live inside the erofs image's
+# own inode metadata, so systemd-sysext loop-mounts it as-is. All this
+# script does on the host is download one file and atomically swap it into
+# place -- if a reboot interrupts it mid-download, the previous good .raw
+# (if any) is untouched and the system boots exactly as before.
+
 APPS_LIST="/etc/hestia/sysext-apps.list"
 REGISTRY="ghcr.io/b-koch"
 TAG="${HESTIA_SYSEXT_TAG:-latest}"
@@ -24,15 +33,15 @@ fi
 changed=0
 
 for app in "${apps[@]}"; do
-    image="${REGISTRY}/sysext-${app}:${TAG}"
-    ext_dir="${EXT_BASE}/${app}"
+    image="${REGISTRY}/sysext-${app}-raw:${TAG}"
+    raw_path="${EXT_BASE}/${app}.raw"
     digest_path="${DIGEST_DIR}/${app}.digest"
 
     echo "=== Checking sysext: ${app} ==="
 
     remote_digest=$(skopeo inspect --format '{{.Digest}}' "docker://${image}" 2>/dev/null || echo "")
     if [[ -z "$remote_digest" ]]; then
-        echo "  x Failed to inspect remote image ${image}, skipping."
+        echo "  x Failed to inspect remote artifact ${image}, skipping."
         continue
     fi
 
@@ -41,12 +50,12 @@ for app in "${apps[@]}"; do
         local_digest=$(<"$digest_path")
     fi
 
-    if [[ "$local_digest" == "$remote_digest" && -d "$ext_dir" ]]; then
+    if [[ "$local_digest" == "$remote_digest" && -f "$raw_path" ]]; then
         echo "  - Up to date (${remote_digest:0:19}), skipping."
         continue
     fi
 
-    echo "  > Changes detected or missing local files. Pulling updates..."
+    echo "  > Changes detected or missing local file. Pulling update..."
 
     if ! podman pull --quiet "$image"; then
         echo "  x Failed to pull ${image}, leaving existing state untouched."
@@ -62,22 +71,28 @@ for app in "${apps[@]}"; do
     }
 
     if podman cp "${ctr}:/." "$tmp_dir/"; then
-        rm -rf "$ext_dir"
-        mv "$tmp_dir" "$ext_dir"
+        fetched="$(find "$tmp_dir" -maxdepth 1 -type f -name '*.raw' -print -quit)"
 
-        if command -v restorecon >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
-            echo "  > Relabeling SELinux contexts..."
-            restorecon -R -F -s "${ext_dir}/usr"=/usr "${ext_dir}"
+        if [[ -z "$fetched" ]]; then
+            echo "  x No .raw payload found in ${image}"
+            rm -rf "$tmp_dir"
+            podman rm "$ctr" >/dev/null 2>&1 || true
+            continue
         fi
 
+        chmod 0644 "$fetched"
+        # Atomic swap: same filesystem, so this is a rename, not a copy.
+        # No relabeling here -- see header comment.
+        mv -f "$fetched" "$raw_path"
+
         printf '%s\n' "$remote_digest" > "$digest_path"
-        echo "  + Installed ${app} to ${ext_dir}"
+        echo "  + Installed ${app} to ${raw_path}"
         changed=1
     else
         echo "  x Failed to extract files from ${image}"
-        rm -rf "$tmp_dir"
     fi
 
+    rm -rf "$tmp_dir"
     podman rm "$ctr" >/dev/null 2>&1 || true
 done
 

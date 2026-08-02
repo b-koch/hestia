@@ -1,9 +1,14 @@
 # Hestia sysext extensions
 
 Builds [systemd-sysext](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html)
-extensions for apps that don't belong baked into the base `hestia` image, and
-publishes each one as its own OCI image on GHCR. The running system pulls
-and merges them at boot / daily (see `../system_files/usr/libexec/hestia-sysext-fetch.sh`).
+extensions for apps that don't belong baked into the base `hestia` image.
+Each one is built as an OCI image (see below), then relabeled with real
+SELinux contexts and packed into a signed EROFS `.raw` image
+(`relabel-and-pack.sh`), which is what actually gets published to GHCR as
+an OCI artifact. The running system downloads and loop-mounts these
+directly (see `../system_files/usr/libexec/hestia-sysext-fetch.sh`) -- no
+SELinux relabeling ever happens on the host, because the labels are already
+baked into the image at build time.
 
 Everything needed to build lives in this directory. Only the workflow file
 (`../.github/workflows/sysext.yml`) has to live outside it, because GitHub
@@ -13,10 +18,12 @@ requires workflows to be under `.github/workflows/`.
 
 ```
 sysext/
-  Containerfile       # multi-stage build; context is this directory
-  Justfile             # just build/push helpers
-  build-sysext.sh      # generic builder, runs inside the container
-  lib/read_list.sh     # shared helper (comment/blank stripping)
+  Containerfile         # multi-stage build; context is this directory
+  Justfile               # just build/pack/push helpers
+  build-sysext.sh        # generic builder, runs inside the container
+  relabel-and-pack.sh    # SELinux relabel + EROFS packing, runs on the host/CI runner
+  dist/                  # local `.raw` output, gitignored
+  lib/read_list.sh       # shared helper (comment/blank stripping)
   apps/<name>/
     packages           # optional: plain list of repo package names
     rpms/*.sh           # optional: each script echoes an RPM URL to install
@@ -47,10 +54,46 @@ release baked into `hestia:latest` at build time), strips everything except
 here don't reliably merge `/opt` from sysext -- relocate it into `/usr/lib`
 in `install.sh` instead, see `apps/bitwarden/install.sh`).
 
-The final image is `FROM scratch` containing just that payload -- pulling
-`ghcr.io/b-koch/sysext-<app>:latest` and extracting it
-(`podman create` + `podman cp ctr:/. dest/`) gives exactly the directory
-layout `systemd-sysext` expects under `/var/lib/extensions/<app>/`.
+The final image is `FROM scratch` containing just that payload. This OCI
+image is only an intermediate build artifact, though -- it's never what
+ships to hosts.
+
+## Why relabeling can't happen in the Containerfile
+
+Files installed by `dnf5 --installroot` inside the builder get *some*
+SELinux label from whatever's ambient in the build container, but not
+necessarily the right one for how they'll be used once mounted on a host.
+Two things stop us from fixing that inside the `Containerfile`:
+
+- `podman build`'s `RUN` steps can't reliably be granted `CAP_MAC_ADMIN` --
+  `--cap-add`/`--privileged` on `podman build` don't work the way they do on
+  `podman run` ([containers/podman#5723](https://github.com/containers/podman/issues/5723)).
+- Even if they could: `security.selinux` xattrs are routinely stripped or
+  overwritten when container engines write/extract OCI layers, since every
+  container gets its own transient label from the runtime. That's not
+  specific to Hestia -- it's why `restorecon`/`setfiles` after `podman cp`
+  is the normal pattern, not a Hestia bug.
+
+So `relabel-and-pack.sh` does the relabeling as a **separate step, after**
+the `podman build`, using a privileged `podman run` (which *does* support
+`--privileged` properly) against `ghcr.io/b-koch/hestia:latest`'s own
+policy (`/etc/selinux/targeted/contexts/files/file_contexts` --
+the same policy every target host uses, since it's the same base). It then
+packs the relabeled rootfs into an EROFS `.raw` image with `mkfs.erofs`.
+Baking the labels into an actual filesystem's inode metadata, instead of
+into a tar layer, means there's nothing left to lose in transit: the `.raw`
+file is one opaque blob of bytes from here on. `just build-and-pack <app>`
+runs both steps; `just pack <app>` alone requires `just build <app>` to
+have already produced the local image tag, and needs `sudo` (setfiles /
+chcon need root).
+
+The `.raw` file is pushed as a plain OCI artifact (not an image) to
+`ghcr.io/b-koch/sysext-<app>-raw` via `oras`, and cosign-signed the same
+way the main image is. Hosts pull it with `podman pull` + `podman create` +
+`podman cp` (same tooling as before, just extracting one file instead of a
+tree) and atomically `mv` it into `/var/lib/extensions/<app>.raw` --
+`systemd-sysext` picks up `.raw` files there directly, no directory
+extraction and no on-host relabeling required.
 
 ## Adding your own app
 
@@ -59,8 +102,11 @@ layout `systemd-sysext` expects under `/var/lib/extensions/<app>/`.
    `install.sh` if the package drops files somewhere other than `/usr`
    (look at `apps/bitwarden` for the `/opt` relocation pattern, and
    `apps/vscode` for the plain-repo-package pattern).
-3. Test locally: `cd sysext && just build <name> && podman run --rm -it
-   localhost/... ` (or just inspect `/out` from the builder stage).
+3. Test locally: `cd sysext && just build-and-pack <name>` builds, relabels
+   and packs into `sysext/dist/sysext-<name>-latest.raw`. Inspect the
+   pre-relabel payload with `podman run --rm -it localhost/... ` (or just
+   `/out` from the builder stage) if something looks off before the pack
+   step.
 4. Add `<name>` to `../system_files/etc/hestia/sysext-apps.list` so the
    running image actually pulls it -- this file lives outside `sysext/`, so
    editing it triggers a normal image rebuild via `../.github/workflows/build.yml`.
@@ -69,15 +115,16 @@ layout `systemd-sysext` expects under `/var/lib/extensions/<app>/`.
 
 ## Registry visibility
 
-The workflow pushes to `ghcr.io/b-koch/sysext-<app>` using the repo's own
-`GITHUB_TOKEN`, same as the main image build. Because the source repo is
-private, each of these packages is private-by-default on first push, and
+The workflow pushes to `ghcr.io/b-koch/sysext-<app>-raw` (the `.raw` OCI
+artifact hosts actually fetch) using the repo's own `GITHUB_TOKEN`, same as
+the main image build. Because the source repo is private, each of these
+packages is private-by-default on first push, and
 `hestia-sysext-fetch.sh` on the client pulls anonymously (no credentials
 baked into the image). So each new package needs a **one-time manual**
 visibility flip to public after its first push:
 
-GitHub -> your profile -> Packages -> `sysext-<app>` -> Package settings ->
-Change visibility -> Public.
+GitHub -> your profile -> Packages -> `sysext-<app>-raw` -> Package
+settings -> Change visibility -> Public.
 
 (This can't safely be automated from the workflow's `GITHUB_TOKEN` -- package
 visibility changes need to be made as you, not as the Actions bot. If you'd
