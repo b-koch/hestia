@@ -2,11 +2,10 @@
 set -euo pipefail
 
 IMAGE="ghcr.io/b-koch/hestia-sysext:${HESTIA_SYSEXT_TAG:-latest}"
-RAW_PATH="/var/lib/extensions.d/hestia.raw"
+EXT_DIR="/var/lib/extensions/hestia"
 DIGEST_PATH="/var/lib/extensions.d/hestia.digest"
-EXT_LINK_DIR="/var/lib/extensions"
 
-mkdir -p /var/lib/extensions.d "$EXT_LINK_DIR"
+mkdir -p /var/lib/extensions.d /var/lib/extensions
 
 echo "=== Checking sysext ==="
 
@@ -21,39 +20,51 @@ if [[ -f "$DIGEST_PATH" ]]; then
     local_digest=$(<"$DIGEST_PATH")
 fi
 
-if [[ "$local_digest" == "$remote_digest" && -f "$RAW_PATH" ]]; then
+if [[ "$local_digest" == "$remote_digest" && -d "$EXT_DIR" ]]; then
     echo "  - Up to date (${remote_digest:0:19}), skipping."
     exit 0
 fi
 
-echo "  > Changes detected or missing local file. Pulling updates..."
+echo "  > Changes detected or missing local files. Pulling updates..."
 
 if ! podman pull --quiet "$IMAGE"; then
     echo "  x Failed to pull ${IMAGE}, leaving existing state untouched."
     exit 1
 fi
 
+systemctl stop systemd-sysext.service 2>/dev/null || true
+
+tmp_dir="$(mktemp -d)"
+
 ctr="$(podman create "$IMAGE")" || {
     echo "  x podman create failed"
+    rm -rf "$tmp_dir"
     exit 1
 }
 
-tmp_raw="$(mktemp)"
+if podman cp "${ctr}:/." "$tmp_dir/"; then
+    rm -rf "$EXT_DIR"
+    mv "$tmp_dir" "$EXT_DIR"
+    
+    # Fix SELinux contexts across all subdirectories using path substitution
+    if command -v restorecon >/dev/null 2>&1 && selinuxenabled 2>/dev/null; then
+        echo "  > Relabeling SELinux contexts..."
+        restorecon -R -F -s "${EXT_DIR}/usr"=/usr "${EXT_DIR}"
+        if [[ -d "${EXT_DIR}/opt" ]]; then
+            restorecon -R -F -s "${EXT_DIR}/opt"=/opt "${EXT_DIR}/opt"
+        fi
+    fi
 
-if podman cp "${ctr}:/sysext.raw" "$tmp_raw"; then
-    mv -f "$tmp_raw" "$RAW_PATH"
-    ln -sf "$RAW_PATH" "${EXT_LINK_DIR}/hestia.raw"
     printf '%s\n' "$remote_digest" > "$DIGEST_PATH"
-    echo "  + Installed hestia.raw ($(du -h "$RAW_PATH" | cut -f1))"
+    echo "  + Installed hestia sysext directory directly to ${EXT_DIR}"
 else
-    echo "  x Failed to extract sysext.raw from ${IMAGE}"
-    rm -f "$tmp_raw"
+    echo "  x Failed to extract files from ${IMAGE}"
+    rm -rf "$tmp_dir"
     podman rm "$ctr" >/dev/null 2>&1
     exit 1
 fi
 
 podman rm "$ctr" >/dev/null 2>&1
-podman rmi "$IMAGE" >/dev/null 2>&1 || true
 
 systemctl daemon-reload
 systemctl enable --now systemd-sysext.service >/dev/null 2>&1 || true
@@ -64,4 +75,3 @@ gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 fc-cache -f 2>/dev/null || true
 
 echo "Sysext refresh complete."
-echo "A reboot is recommended so services newly provided by sysexts (e.g. libvirtd) start cleanly."

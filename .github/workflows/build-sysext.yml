@@ -52,9 +52,11 @@ jobs:
           set -euox pipefail
           DATE=$(date +%Y%m%d)
           IMAGE="${IMAGE_REGISTRY}/hestia-sysext"
-          sudo -E podman push --digestfile=/tmp/digestfile "${IMAGE}:${DEFAULT_TAG}"
+          
+          # Force zstd:chunked compression on push
+          sudo -E podman push --compression-format=zstd:chunked --digestfile=/tmp/digestfile "${IMAGE}:${DEFAULT_TAG}"
           sudo -E podman tag "${IMAGE}:${DEFAULT_TAG}" "${IMAGE}:${DATE}"
-          sudo -E podman push "${IMAGE}:${DATE}"
+          sudo -E podman push --compression-format=zstd:chunked "${IMAGE}:${DATE}"
 
           digest=$(< /tmp/digestfile)
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
