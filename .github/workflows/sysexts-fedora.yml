@@ -62,12 +62,6 @@ jobs:
           sysext: 'sysext/vscode'
           image: ${{ env.IMAGE }}
 
-      - name: "Build sysext: sysext/vscodium"
-        uses: ./.github/actions/build
-        with:
-          sysext: 'sysext/vscodium'
-          image: ${{ env.IMAGE }}
-
   publish-sysexts:
     runs-on: "ubuntu-24.04"
     container:
