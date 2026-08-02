@@ -2,8 +2,8 @@
 Description=Periodically refresh Hestia sysext extensions
 
 [Timer]
-OnBootSec=10min
-OnUnitActiveSec=1d
+OnBootSec=30s
+OnCalendar=daily
 Persistent=true
 
 [Install]

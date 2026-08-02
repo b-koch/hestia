@@ -26,4 +26,6 @@ else
     echo "No service files found in ${SERVICES_ENABLE_DIR}."
 fi
 
+systemctl enable hestia-sysext-fetch.timer
+
 shopt -u nullglob
