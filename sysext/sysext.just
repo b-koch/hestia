@@ -228,14 +228,18 @@ check target arch=arch:
 download-rpms target arch=arch:
     #!/bin/bash
     set -euo pipefail
+
+    echo "1"
     if [[ -n "{{debug}}" ]]; then
       set -x
     fi
+    echo "2"
 
     # Skip this step if we have not been asked to download packages
     if [[ -z "{{packages}}" ]]; then
         exit 0
     fi
+    echo "3"
 
     enablerepos=""
     if [[ -n "{{enable_repos}}" ]]; then
@@ -244,6 +248,7 @@ download-rpms target arch=arch:
             enablerepos+=" --enablerepo=${r}"
         done
     fi
+    echo "4"
 
     disablerepos=""
     if [[ -n "{{disable_repos}}" ]]; then
