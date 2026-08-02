@@ -283,6 +283,7 @@ download-rpms target arch=arch:
 
     # Always disable the openh264 repo by default
     pre_commands="dnf5 config-manager setopt fedora-cisco-openh264.enabled=0; "
+    echo "5"
 
     if [[ -n "{{pre_commands}}" ]]; then
         pre_commands+="{{pre_commands}} ; "
@@ -302,6 +303,7 @@ download-rpms target arch=arch:
         done
         pre_commands+=" ; "
     fi
+    echo "6"
 
     if [[ -n "{{rpm_fusion_repos}}" ]]; then
         release=$(podman run {{podman_opts}} "{{target}}" \
@@ -315,11 +317,13 @@ download-rpms target arch=arch:
             pre_commands+=" dnf install -y https://mirrors.rpmfusion.org/${r}/fedora/rpmfusion-${r}-release-${release}.noarch.rpm ;"
         done
     fi
+    echo "7"
 
     mkdir -p ../.dnf-cache
 
     mkdir rpms
     cd rpms
+    echo "8"
 
     echo "⬇️ Downloading packages (${dnf_arches}): ${packages}"
     # dnf install --downloadonly --downloaddir . ${dnf_arch} ${enablerepos} ${packages}
