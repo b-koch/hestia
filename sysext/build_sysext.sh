@@ -156,14 +156,15 @@ find "$ROOTFS" \
     -exec rm -rf {} +
 
 
-echo "--- Building EROFS ---"
+echo "--- Building SquashFS ---"
 
-dnf5 -y install erofs-utils >/dev/null
+dnf5 -y install squashfs-utils >/dev/null
 
-mkfs.erofs \
-    -zzstd \
+mksquashfs \
+    "$ROOTFS" \
     "$OUT" \
-    "$ROOTFS"
+    -noappend \
+    -comp zstd
 
 
 echo "=== Built Hestia sysext ==="
