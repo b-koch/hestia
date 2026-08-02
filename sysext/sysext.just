@@ -228,18 +228,14 @@ check target arch=arch:
 download-rpms target arch=arch:
     #!/bin/bash
     set -euo pipefail
-
-    echo "1"
     if [[ -n "{{debug}}" ]]; then
       set -x
     fi
-    echo "2"
 
     # Skip this step if we have not been asked to download packages
     if [[ -z "{{packages}}" ]]; then
         exit 0
     fi
-    echo "3"
 
     enablerepos=""
     if [[ -n "{{enable_repos}}" ]]; then
@@ -248,7 +244,6 @@ download-rpms target arch=arch:
             enablerepos+=" --enablerepo=${r}"
         done
     fi
-    echo "4"
 
     disablerepos=""
     if [[ -n "{{disable_repos}}" ]]; then
@@ -257,6 +252,7 @@ download-rpms target arch=arch:
             disablerepos+=" --disablerepo=${r}"
         done
     fi
+    echo "1"
 
     dnf_arch=""
     if [[ -z "{{dnf_arch}}" ]]; then
@@ -267,6 +263,7 @@ download-rpms target arch=arch:
     for a in ${dnf_arches}; do
         dnf_arch+="--arch=${a} "
     done
+    echo "2"
 
     dnf_opts=""
     if [[ "{{dnf_weak_deps}}" == false ]]; then
@@ -279,8 +276,10 @@ download-rpms target arch=arch:
             dnf_opts+=" --exclude=${p}"
         done
     fi
+    echo "3"
 
     packages="$(echo "{{packages}}" | xargs)"
+    echo "4"
 
     # Always disable the openh264 repo by default
     pre_commands="dnf5 config-manager setopt fedora-cisco-openh264.enabled=0; "
