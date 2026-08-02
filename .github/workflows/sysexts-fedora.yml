@@ -56,6 +56,18 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
 
+      - name: "Build sysext: sysext/vscode"
+        uses: ./.github/actions/build
+        with:
+          sysext: 'sysext/vscode'
+          image: ${{ env.IMAGE }}
+
+      - name: "Build sysext: sysext/vscodium"
+        uses: ./.github/actions/build
+        with:
+          sysext: 'sysext/vscodium'
+          image: ${{ env.IMAGE }}
+
   publish-sysexts:
     runs-on: "ubuntu-24.04"
     container:

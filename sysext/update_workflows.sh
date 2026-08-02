@@ -48,19 +48,15 @@ main() {
     for arch in "${arches[@]}"; do
         for image in "${images[@]}"; do
             list=()
-            # Use HEAD:sysext/ to get just the folder names (e.g., "vscode")
-            for s in $(git ls-tree -d --name-only HEAD:sysext/ 2>/dev/null || true); do
-                # Check the actual filesystem path relative to the git root
-                [[ -d "sysext/${s}" ]] || continue
-                
-                pushd "sysext/${s}" > /dev/null
+            for s in $(git ls-tree -d --name-only HEAD sysext/ 2>/dev/null || true); do
+                [[ -d "${s}" ]] || continue
+                pushd "${s}" > /dev/null
                 if [[ "${arch}" == "x86_64" ]]; then
-                    # Added 2>/dev/null to silence folders without a justfile
-                    if [[ $(just targets 2>/dev/null | grep -c "${image}") == "1" ]]; then
+                    if [[ $(just targets | grep -c "${image}") == "1" ]]; then
                         list+=("${s}")
                     fi
                 else
-                    if [[ $(just targets 2>/dev/null | grep -cE "${image} .*${arch}.*") == "1" ]]; then
+                    if [[ $(just targets | grep -cE "${image} .*${arch}.*") == "1" ]]; then
                         list+=("${s}")
                     fi
                 fi
