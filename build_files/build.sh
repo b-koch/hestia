@@ -31,5 +31,8 @@ echo "Enabling services..."
 echo "Manage groups..."
 /ctx/scripts/manage_groups.sh
 
+echo "Append topgrade..."
+/ctx/scripts/append-topgrade.sh
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
