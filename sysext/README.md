@@ -1,93 +1,85 @@
-# Community sourced systemd system extensions (sysexts) for Fedora image based systems
+# Hestia sysext extensions
 
-**NOTE: This project is a work in progress. Make sure to read the [known
-limitations section](https://extensions.fcos.fr). Use at your own risk.**
+Builds [systemd-sysext](https://www.freedesktop.org/software/systemd/man/latest/systemd-sysext.html)
+extensions for apps that don't belong baked into the base `hestia` image, and
+publishes each one as its own OCI image on GHCR. The running system pulls
+and merges them at boot / daily (see `../system_files/usr/libexec/hestia-sysext-fetch.sh`).
 
-This repo gathers sysexts made from community provided sources, upstream build
-binaries and COPR packages.
+Everything needed to build lives in this directory. Only the workflow file
+(`../.github/workflows/sysext.yml`) has to live outside it, because GitHub
+requires workflows to be under `.github/workflows/`.
 
-For sysexts built from Fedora packages only, see
-[extensions.fcos.fr/fedora](https://extensions.fcos.fr/fedora).
-
-For general explainations about systemd system extensions (sysexts) and how
-to use them, see the documentation from the main page:
-[extensions.fcos.fr](https://extensions.fcos.fr).
-
-## Disabling fetching tags
-
-This project uses GitHub releases to publish sysexts, and those releases also
-create Git tags, thus you might want to disable fetching tags for the remote
-using:
-
-```bash
-git config remote.origin.tagopt "--no-tags"
-```
-
-and then remove all local tags with:
-
-```bash
-git tag -l | xargs git tag -d > /dev/null
-```
-
-## Building
-
-Building those images currently require `root` privileges. The currently
-supported options for building those sysexts are:
-- using a rootless, privileged, non-SELinux confined container (such as a
-  toolbox/distrobox container), redirecting `podman` commands to run them on
-  the host:
-  ```
-  [toolbox]$ cat /usr/local/bin/podman
-  #!/bin/bash
-  executable="$(basename ${0})"
-  exec flatpak-spawn --host "${executable}" "${@}"
-  ```
-- Using nested podman containers (current path in CI).
-
-Make sure that you have the following packages installed:
-- `cpio`
-- `erofs-utils`
-- `jq`
-- [`just`](https://github.com/casey/just)
-- `podman` (only when not using the host redirection script above)
-- `wget`
-
-To build the `python` sysext:
+## Layout
 
 ```
-$ cd python
+sysext/
+  Containerfile       # multi-stage build; context is this directory
+  Justfile             # just build/push helpers
+  build-sysext.sh      # generic builder, runs inside the container
+  lib/read_list.sh     # shared helper (comment/blank stripping)
+  apps/<name>/
+    packages           # optional: plain list of repo package names
+    rpms/*.sh           # optional: each script echoes an RPM URL to install
+    repos/*.repo        # optional: yum repo files, gpgkey= is auto-imported
+    install.sh          # optional: post-install fixups, $ROOTFS is set
 ```
 
-List the supported target images:
+At least one of `packages`, `rpms/*.sh` must produce something to install,
+unless `install.sh` populates the rootfs itself.
 
-```
-$ just targets
-```
+## How it builds
 
-Build the sysext for Fedora CoreOS *next*:
+Each app is built by running `dnf5 --installroot=/out --use-host-config`
+**inside a container based on `ghcr.io/b-koch/hestia:latest`** (see
+`Containerfile`). This means:
 
-```
-$ just build "quay.io/fedora/fedora-coreos:next"
-```
+- No nested/privileged containers, no downloading+extracting RPMs by hand.
+- Packages resolve against exactly the repos and versions already
+  configured in your own image, so there's no risk of a sysext linking
+  against a different glibc/library set than the host.
+- Only your current image is targeted -- no multi-Fedora-version matrix.
 
-## `extensions.fcos.fr` redirector
+After installing, `build-sysext.sh` writes
+`usr/lib/extension-release.d/extension-release.<app>` (`ID=_any` so it
+applies regardless of the host's `ID=`, `VERSION_ID` pinned to the Fedora
+release baked into `hestia:latest` at build time), strips everything except
+`/usr`, and fails the build if anything is left under `/opt` (Bazzite/Fedora
+here don't reliably merge `/opt` from sysext -- relocate it into `/usr/lib`
+in `install.sh` instead, see `apps/bitwarden/install.sh`).
 
-A Caddy based redirector is hosted at `extensions.fcos.fr`. The configutation
-is available in the parent project's Caddyfile. It redirects URLs queried by
-`systemd-sysupdate` to GitHub releases where the sysexts are hosted in this
-repo.
+The final image is `FROM scratch` containing just that payload -- pulling
+`ghcr.io/b-koch/sysext-<app>:latest` and extracting it
+(`podman create` + `podman cp ctr:/. dest/`) gives exactly the directory
+layout `systemd-sysext` expects under `/var/lib/extensions/<app>/`.
 
-## Contributing
+## Adding your own app
 
-See [CONTRIBUTING](CONTRIBUTING.md) for details about the CI setup specific to
-this repo.
+1. `mkdir -p sysext/apps/<name>`
+2. Add `packages` and/or `repos/*.repo` and/or `rpms/*.sh`, plus an
+   `install.sh` if the package drops files somewhere other than `/usr`
+   (look at `apps/bitwarden` for the `/opt` relocation pattern, and
+   `apps/vscode` for the plain-repo-package pattern).
+3. Test locally: `cd sysext && just build <name> && podman run --rm -it
+   localhost/... ` (or just inspect `/out` from the builder stage).
+4. Add `<name>` to `../system_files/etc/hestia/sysext-apps.list` so the
+   running image actually pulls it -- this file lives outside `sysext/`, so
+   editing it triggers a normal image rebuild via `../.github/workflows/build.yml`.
+5. Push -- `.github/workflows/sysext.yml` picks up any new directory under
+   `sysext/apps/` automatically, no workflow changes needed.
 
-## Credits
+## Registry visibility
 
-This project is heavily inspired by the work done by
-[Thilo](https://github.com/t-lo) on the
-[Flatcar sysext bakery](https://flatcar.github.io/sysext-bakery/).
+The workflow pushes to `ghcr.io/b-koch/sysext-<app>` using the repo's own
+`GITHUB_TOKEN`, same as the main image build. Because the source repo is
+private, each of these packages is private-by-default on first push, and
+`hestia-sysext-fetch.sh` on the client pulls anonymously (no credentials
+baked into the image). So each new package needs a **one-time manual**
+visibility flip to public after its first push:
 
-## Licenses
+GitHub -> your profile -> Packages -> `sysext-<app>` -> Package settings ->
+Change visibility -> Public.
 
-See [LICENSES](LICENSES).
+(This can't safely be automated from the workflow's `GITHUB_TOKEN` -- package
+visibility changes need to be made as you, not as the Actions bot. If you'd
+rather keep them private, use a read-only PAT baked into the image instead
+and I can wire that up.)
