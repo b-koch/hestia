@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 IMAGE="ghcr.io/b-koch/hestia-sysext:${HESTIA_SYSEXT_TAG:-latest}"
 RAW_PATH="/var/lib/extensions.d/hestia.raw"
+DIGEST_PATH="/var/lib/extensions.d/hestia.digest"
 EXT_LINK_DIR="/var/lib/extensions"
 
 mkdir -p /var/lib/extensions.d "$EXT_LINK_DIR"
@@ -15,7 +16,10 @@ if [[ -z "$remote_digest" ]]; then
     exit 1
 fi
 
-local_digest=$(podman image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null | cut -d@ -f2 || echo "")
+local_digest=""
+if [[ -f "$DIGEST_PATH" ]]; then
+    local_digest=$(<"$DIGEST_PATH")
+fi
 
 if [[ "$local_digest" == "$remote_digest" && -f "$RAW_PATH" ]]; then
     echo "  - Up to date (${remote_digest:0:19}), skipping."
@@ -29,12 +33,17 @@ if ! podman pull --quiet "$IMAGE"; then
     exit 1
 fi
 
-ctr="$(podman create "$IMAGE")" || { echo "  x podman create failed"; exit 1; }
+ctr="$(podman create "$IMAGE")" || {
+    echo "  x podman create failed"
+    exit 1
+}
+
 tmp_raw="$(mktemp)"
 
 if podman cp "${ctr}:/sysext.raw" "$tmp_raw"; then
     mv -f "$tmp_raw" "$RAW_PATH"
     ln -sf "$RAW_PATH" "${EXT_LINK_DIR}/hestia.raw"
+    printf '%s\n' "$remote_digest" > "$DIGEST_PATH"
     echo "  + Installed hestia.raw ($(du -h "$RAW_PATH" | cut -f1))"
 else
     echo "  x Failed to extract sysext.raw from ${IMAGE}"
