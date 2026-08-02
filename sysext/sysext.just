@@ -252,7 +252,6 @@ download-rpms target arch=arch:
             disablerepos+=" --disablerepo=${r}"
         done
     fi
-    echo "1"
 
     dnf_arch=""
     if [[ -z "{{dnf_arch}}" ]]; then
@@ -263,7 +262,6 @@ download-rpms target arch=arch:
     for a in ${dnf_arches}; do
         dnf_arch+="--arch=${a} "
     done
-    echo "2"
 
     dnf_opts=""
     if [[ "{{dnf_weak_deps}}" == false ]]; then
@@ -276,19 +274,15 @@ download-rpms target arch=arch:
             dnf_opts+=" --exclude=${p}"
         done
     fi
-    echo "3"
 
     packages="$(echo "{{packages}}" | xargs)"
-    echo "4"
 
     # Always disable the openh264 repo by default
     pre_commands="dnf5 config-manager setopt fedora-cisco-openh264.enabled=0; "
-    echo "5"
 
     if [[ -n "{{pre_commands}}" ]]; then
         pre_commands+="{{pre_commands}} ; "
     fi
-    echo "5a"
     if [[ -n "{{copr_repos}}" ]]; then
         pre_commands+="dnf install -y dnf5-plugins"
         for r in "{{copr_repos}}"; do
@@ -296,8 +290,7 @@ download-rpms target arch=arch:
         done
         pre_commands+=" ; "
     fi
-    echo "5b"
-    if [[ -n "{{external_repos}}" ]]; thenContainerfile
+    if [[ -n "{{external_repos}}" ]]; then
         pre_commands+="dnf install -y dnf5-plugins"
         external_repos="$(echo "{{external_repos}}" | xargs)"
         for r in ${external_repos}; do
@@ -305,8 +298,6 @@ download-rpms target arch=arch:
         done
         pre_commands+=" ; "
     fi
-    echo "6"
-
     if [[ -n "{{rpm_fusion_repos}}" ]]; then
         release=$(podman run {{podman_opts}} "{{target}}" \
             bash -c 'rpm -E %fedora' | tr -d '\n')
@@ -319,13 +310,11 @@ download-rpms target arch=arch:
             pre_commands+=" dnf install -y https://mirrors.rpmfusion.org/${r}/fedora/rpmfusion-${r}-release-${release}.noarch.rpm ;"
         done
     fi
-    echo "7"
 
     mkdir -p ../.dnf-cache
 
     mkdir rpms
     cd rpms
-    echo "8"
 
     echo "⬇️ Downloading packages (${dnf_arches}): ${packages}"
     # dnf install --downloadonly --downloaddir . ${dnf_arch} ${enablerepos} ${packages}
