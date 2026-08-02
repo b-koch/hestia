@@ -12,36 +12,35 @@ set -euo pipefail
 # set -x
 
 main() {
-    if [[ ! -d .github ]] || [[ ! -d .git ]]; then
-        echo "This script must be run at the root of the repo"
+    # Move to the root of the git repo to allow execution from subdirectories (like sysext/)
+    cd "$(git rev-parse --show-toplevel)" || { echo "This script must be run within a git repository"; exit 1; }
+
+    if [[ ! -d .github ]]; then
+        echo "Could not find .github directory at the repository root."
         exit 1
     fi
 
     local -r tmpl=".github/workflow-templates"
     if [[ ! -d "${tmpl}" ]]; then
-        echo "Could not find the templates. Is this script run from the root of the repo?"
+        echo "Could not find the templates. Are they present in the repository?"
         exit 1
     fi
 
     # Remove all existing worflows
-    rm -f "./.github/workflows/containers"*".yml"
     rm -f "./.github/workflows/sysexts"*".yml"
 
     local -r releaseurl="https://github.com/\${{ github.repository }}/releases/download"
 
     arches=(
         'x86_64'
-        'aarch64'
     )
 
     images=(
-        'quay.io/fedora-ostree-desktops/base-atomic:43'
         'quay.io/fedora-ostree-desktops/base-atomic:44'
     )
 
     # Set jobnames
     declare -A jobnames
-    jobnames["quay.io/fedora-ostree-desktops/base-atomic:43"]="fedora-43"
     jobnames["quay.io/fedora-ostree-desktops/base-atomic:44"]="fedora-44"
 
     # Get the list of sysexts for each image and each arch
@@ -49,15 +48,19 @@ main() {
     for arch in "${arches[@]}"; do
         for image in "${images[@]}"; do
             list=()
-            for s in $(git ls-tree -d --name-only HEAD | grep -Ev ".github|docs|LICENSES"); do
-                pushd "${s}" > /dev/null
-                # Only require the architecture to be explicitly listed for non x86_64 for now
+            # Use HEAD:sysext/ to get just the folder names (e.g., "vscode")
+            for s in $(git ls-tree -d --name-only HEAD:sysext/ 2>/dev/null || true); do
+                # Check the actual filesystem path relative to the git root
+                [[ -d "sysext/${s}" ]] || continue
+                
+                pushd "sysext/${s}" > /dev/null
                 if [[ "${arch}" == "x86_64" ]]; then
-                    if [[ $(just targets | grep -c "${image}") == "1" ]]; then
+                    # Added 2>/dev/null to silence folders without a justfile
+                    if [[ $(just targets 2>/dev/null | grep -c "${image}") == "1" ]]; then
                         list+=("${s}")
                     fi
                 else
-                    if [[ $(just targets | grep -cE "${image} .*${arch}.*") == "1" ]]; then
+                    if [[ $(just targets 2>/dev/null | grep -cE "${image} .*${arch}.*") == "1" ]]; then
                         list+=("${s}")
                     fi
                 fi
