@@ -8,7 +8,7 @@ COPY build-sysext.sh /sysext/build-sysext.sh
 
 # Build against our own image so packages resolve against exactly what's
 # already installed on the target system (same Fedora release, same repos).
-FROM ghcr.io/b-koch/hestia:latest AS builder
+FROM ghcr.io/b-koch/hestia:latest@sha256:5fe4d7454a409fdc038a45162c57889b89b5fdd6aefe26cfcbb1c463aa3daa40 AS builder
 ARG APP
 
 RUN --mount=type=bind,from=ctx,source=/sysext,target=/sysext \
