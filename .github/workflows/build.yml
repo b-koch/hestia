@@ -48,8 +48,6 @@ jobs:
 
   build_push:
     name: Build and push image
-    needs: check_base
-    if: needs.check_base.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
 
     permissions:
@@ -72,8 +70,8 @@ jobs:
         run: |
           just check
 
-      - name: Image Name
-        id: image-name
+      - name: Determine image info and base digest
+        id: image-info
         run: |
           IMAGE_NAME=$(just image_name)
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
@@ -82,7 +80,15 @@ jobs:
         id: gen-default-tag
         run: |
           DEFAULT_TAG=$(just generate-default-tag)
-          echo "DEFAULT_TAG=${DEFAULT_TAG}" >> $GITHUB_ENV
+          BASE_IMAGE="ghcr.io/ublue-os/bazzite-gnome:stable"
+          
+          # Fetch current SHA256 digest of the upstream base image
+          BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
+
+          echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+          echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
+          echo "image_registry=${IMAGE_REGISTRY,,}" >> $GITHUB_OUTPUT
+          echo "base_digest=${BASE_DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Prepare environment
         run: |
@@ -127,8 +133,8 @@ jobs:
           ALIAS_TAGS: ${{ steps.gen-build-tags.outputs.alias_tags }}
         run: |
           sudo -E $(command -v just) tag-images \
-            "${IMAGE_NAME}" \
-            "${DEFAULT_TAG}" \
+            "${{ steps.image-info.outputs.image_name }}" \
+            "${{ steps.image-info.outputs.default_tag }}" \
             "${ALIAS_TAGS}"
 
       - name: Login to GitHub Container Registry
@@ -147,7 +153,7 @@ jobs:
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            sudo -E podman push --digestfile=/tmp/digestfile ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
+            sudo -E podman push --digestfile=/tmp/digestfile ${{ steps.image-info.outputs.image_name }}:${tag} ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}:${tag}
           done
 
           digest=$(< /tmp/digestfile)

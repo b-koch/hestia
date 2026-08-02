@@ -1,0 +1,4 @@
+SUBSYSTEM=="block", ENV{LOOP_BACKING_FILE}!="?*", GOTO="hide_ext_end"
+SUBSYSTEM=="block", ENV{LOOP_BACKING_FILE}=="/var/lib/extensions/*", ENV{UDISKS_IGNORE}="1"
+SUBSYSTEM=="block", ENV{LOOP_BACKING_FILE}=="/var/lib/extensions.d/*", ENV{UDISKS_IGNORE}="1"
+LABEL="hide_ext_end"

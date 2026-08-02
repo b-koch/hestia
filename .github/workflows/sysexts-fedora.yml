@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: Timothée Ravier <tim@siosm.fr>
+# SPDX-License-Identifier: CC0-1.0
+
+name: "Build sysexts for Fedora"
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  RELEASEURL: "https://github.com/${{ github.repository }}/releases/download"
+
+on:
+  pull_request:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "main"
+  schedule:
+    - cron:  '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force-rebuild:
+        description: 'Force rebuild of all sysexts'
+        required: true
+        default: false
+        type: boolean
+
+# Needed to allow creating a release
+permissions:
+  contents: write
+
+# Prevent multiple workflow runs from racing to ensure that pushes are made
+# sequentialy for the main branch. Also cancel in progress workflow runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-fedora-44-x86_64:
+    runs-on: "ubuntu-24.04"
+    container:
+      image: "ghcr.io/fedora-sysexts/buildroot:latest"
+      options: "--privileged --security-opt label=disable --user 0:0"
+    env:
+      IMAGE: "quay.io/fedora-ostree-desktops/base-atomic:44"
+      FORCE_REBUILD: ${{ inputs.force-rebuild }}
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v6
+
+      - name: "Setup artifacts and dnf cache directories"
+        run: |
+          mkdir -p artifacts .dnf-cache
+
+      - name: "Mark directory as safe"
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: "Build sysext: sysext/vscode"
+        uses: ./.github/actions/build
+        with:
+          sysext: 'sysext/vscode'
+          image: ${{ env.IMAGE }}
+
+  publish-sysexts:
+    runs-on: "ubuntu-24.04"
+    container:
+      image: "ghcr.io/fedora-sysexts/buildroot:latest"
+      options: "--privileged --security-opt label=disable --user 0:0"
+    # Run after the builds and versionned release
+    needs:
+      - build-fedora-44-x86_64
+    # Use `always()` to still run if any dependent job fails
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v6
+
+      - name: "Mark directory as safe"
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: "Gather all sysexts releases"
+        uses: ./.github/actions/gather
