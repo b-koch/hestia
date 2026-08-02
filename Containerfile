@@ -6,7 +6,7 @@ COPY lib /lib
 
 # Base Image
 # Universal Blue Images: https://github.com/orgs/ublue-os/packages
-FROM ghcr.io/ublue-os/bazzite-gnome:stable@sha256:0f58a91084df3eba813b4fb898bbe0739e4787ee33aaaa7fe005c11d8d478ad9
+FROM ghcr.io/ublue-os/bazzite-gnome:stable@sha256:7b031512ef92d8312f9afe9169817073070b92753fb0c59382d4f5d477e476d3
 
 RUN rm -f /opt
 RUN sleep 2
