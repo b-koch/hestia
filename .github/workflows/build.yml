@@ -4,7 +4,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 */3 * * *'  # Runs every 3 hours
+    - cron: '0 4 * * 6'
   push:
     branches:
       - main
@@ -23,66 +23,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check_base:
-    name: Check if build is needed
-    runs-on: ubuntu-24.04
-    outputs:
-      should_build: ${{ steps.check.outputs.should_build }}
-      base_digest: ${{ steps.check.outputs.base_digest }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-
-      - name: Determine image tags
-        id: image-info
-        run: |
-          IMAGE_NAME=$(just image_name)
-          DEFAULT_TAG=$(just generate-default-tag)
-          IMAGE_REGISTRY="ghcr.io/${{ github.repository_owner }}"
-
-          echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
-          echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
-          echo "image_registry=${IMAGE_REGISTRY,,}" >> $GITHUB_OUTPUT
-
-      - name: Compare base vs custom image digest
-        id: check
-        run: |
-          BASE_IMAGE="ghcr.io/ublue-os/bazzite-gnome:stable"
-          CUSTOM_IMAGE="${{ steps.image-info.outputs.image_registry }}/${{ steps.image-info.outputs.image_name }}:${{ steps.image-info.outputs.default_tag }}"
-
-          # Fetch current SHA256 digest of the upstream base image
-          BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
-          echo "base_digest=${BASE_DIGEST}" >> $GITHUB_OUTPUT
-
-          if [[ "${{ github.event_name }}" != "schedule" ]]; then
-            echo "Triggered by '${{ github.event_name }}'. Forcing build."
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "Scheduled run. Comparing base image digest..."
-
-          # Read stored base digest label from the custom image manifest
-          CUSTOM_BASE_DIGEST=$(skopeo inspect docker://$CUSTOM_IMAGE | jq -r '.Labels["org.opencontainers.image.base.digest"] // empty' 2>/dev/null || echo "")
-
-          echo "Current upstream base digest: ${BASE_DIGEST}"
-          echo "Stored base digest in custom: ${CUSTOM_BASE_DIGEST}"
-
-          if [[ "$BASE_DIGEST" != "$CUSTOM_BASE_DIGEST" ]]; then
-            echo "Base image digest has changed. Build required."
-            echo "should_build=true" >> $GITHUB_OUTPUT
-          else
-            echo "Base image digest matches. Skipping build."
-            echo "should_build=false" >> $GITHUB_OUTPUT
-          fi
-
   build_push:
     name: Build and push image
-    needs: check_base
-    if: needs.check_base.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
 
     permissions:
@@ -105,47 +47,42 @@ jobs:
         run: |
           just check
 
-      - name: Image Name
-        id: image-name
+      - name: Determine image info and base digest
+        id: image-info
         run: |
           IMAGE_NAME=$(just image_name)
-          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
-
-      - name: Default Tag
-        id: gen-default-tag
-        run: |
           DEFAULT_TAG=$(just generate-default-tag)
-          echo "DEFAULT_TAG=${DEFAULT_TAG}" >> $GITHUB_ENV
+          BASE_IMAGE="ghcr.io/ublue-os/bazzite-gnome:stable"
+          
+          # Fetch current SHA256 digest of the upstream base image
+          BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
+
+          echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+          echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
+          echo "image_registry=${IMAGE_REGISTRY,,}" >> $GITHUB_OUTPUT
+          echo "base_digest=${BASE_DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Prepare environment
         run: |
-          echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
-          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
+          echo "IMAGE_REGISTRY=${{ steps.image-info.outputs.image_registry }}" >> ${GITHUB_ENV}
+          echo "IMAGE_NAME=${{ steps.image-info.outputs.image_name }}" >> ${GITHUB_ENV}
            
       - name: Build Image
         id: build-image
         env:
-          BASE_DIGEST: ${{ needs.check_base.outputs.base_digest }}
+          BASE_DIGEST: ${{ steps.image-info.outputs.base_digest }}
         run: |
           sudo -E $(command -v just) build \
-            "${IMAGE_NAME}" \
-            "${DEFAULT_TAG}" \
+            "${{ steps.image-info.outputs.image_name }}" \
+            "${{ steps.image-info.outputs.default_tag }}" \
             "${BASE_DIGEST}"
-
-
-      # - name: Rechunk image
-      #   id: rechunk
-      #   run: |
-      #     sudo -E $(command -v just) rechunk \
-      #       ${IMAGE_NAME} \
-      #       ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
         run: |
           alias_tags="$(just generate-build-tags \
-                        ${IMAGE_NAME} \
-                        ${DEFAULT_TAG})"
+                        ${{ steps.image-info.outputs.image_name }} \
+                        ${{ steps.image-info.outputs.default_tag }})"
           echo "alias_tags=${alias_tags}" >> $GITHUB_OUTPUT
 
       - name: Tag Image
@@ -154,8 +91,8 @@ jobs:
           ALIAS_TAGS: ${{ steps.gen-build-tags.outputs.alias_tags }}
         run: |
           sudo -E $(command -v just) tag-images \
-            "${IMAGE_NAME}" \
-            "${DEFAULT_TAG}" \
+            "${{ steps.image-info.outputs.image_name }}" \
+            "${{ steps.image-info.outputs.default_tag }}" \
             "${ALIAS_TAGS}"
 
       - name: Login to GitHub Container Registry
@@ -174,7 +111,7 @@ jobs:
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            sudo -E podman push --digestfile=/tmp/digestfile ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
+            sudo -E podman push --digestfile=/tmp/digestfile ${{ steps.image-info.outputs.image_name }}:${tag} ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}:${tag}
           done
 
           digest=$(< /tmp/digestfile)
@@ -194,4 +131,4 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push-image.outputs.digest }}
         run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${IMAGE_NAME}@${DIGEST}
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}@${DIGEST}
