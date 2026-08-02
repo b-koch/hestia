@@ -5,7 +5,7 @@ COPY system_files /system_files
 
 # Base Image
 # Universal Blue Images: https://github.com/orgs/ublue-os/packages
-FROM ghcr.io/ublue-os/bazzite-gnome:stable
+FROM ghcr.io/ublue-os/bazzite-gnome:stable@sha256:7b031512ef92d8312f9afe9169817073070b92753fb0c59382d4f5d477e476d3
 
 RUN rm -f /opt
 RUN sleep 2
