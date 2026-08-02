@@ -25,9 +25,6 @@ echo "Installing fonts..."
 echo "Applying configuration..."
 /ctx/scripts/configure.sh
 
-echo "Enabling Hestia sysext auto-update..."
-/ctx/scripts/enable_hestia_sysext.sh
-
 echo "Disable repositories..."
 /ctx/scripts/disable_repos.sh
 
