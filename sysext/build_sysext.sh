@@ -5,7 +5,6 @@ source /ctx/lib/read_list.sh
 
 ROOTFS="/build/root"
 OUT_DIR="/out"
-OUT="${OUT_DIR}/sysext.raw"
 
 RELEASEVER="$(rpm -E '%{fedora}')"
 ARCH_ID="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"
@@ -164,11 +163,8 @@ rm -rf "$ROOTFS/usr/share/licenses"
 
 
 echo "--- Exporting plain rootfs structure ---"
+
 cp -a "$ROOTFS"/* "$OUT_DIR"/
 
 echo "=== Prepared Hestia sysext payload ==="
 du -sh "$OUT_DIR"
-
-
-echo "=== Built Hestia sysext ==="
-du -h "$OUT"
