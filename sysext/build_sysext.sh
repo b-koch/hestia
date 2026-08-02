@@ -3,13 +3,12 @@ set -euo pipefail
 
 source /ctx/lib/read_list.sh
 
-ROOTFS="/build/root"
-OUT_DIR="/out"
+ROOTFS="/out"
 
 RELEASEVER="$(rpm -E '%{fedora}')"
 ARCH_ID="$(uname -m | sed 's/x86_64/x86-64/;s/aarch64/arm64/')"
 
-mkdir -p "$ROOTFS" "$OUT_DIR"
+mkdir -p "$ROOTFS"
 
 echo "--- Preparing image-build RPM environment ---"
 
@@ -144,6 +143,10 @@ ARCHITECTURE=${ARCH_ID}
 EOF
 
 
+echo "--- Cleaning package manager caches ---"
+dnf5 clean all || true
+rm -rf /var/cache/dnf /var/cache/libdnf5 /var/lib/dnf
+
 echo "--- Removing everything except runtime payload ---"
 
 find "$ROOTFS" \
@@ -153,7 +156,6 @@ find "$ROOTFS" \
     ! -name opt \
     -exec rm -rf {} +
 
-
 rm -f "$ROOTFS/usr/lib/os-release"
 
 rm -rf "$ROOTFS/usr/share/man"
@@ -162,9 +164,5 @@ rm -rf "$ROOTFS/usr/share/info"
 rm -rf "$ROOTFS/usr/share/licenses"
 
 
-echo "--- Exporting plain rootfs structure ---"
-
-cp -a "$ROOTFS"/* "$OUT_DIR"/
-
 echo "=== Prepared Hestia sysext payload ==="
-du -sh "$OUT_DIR"
+du -sh "$ROOTFS"
