@@ -15,7 +15,7 @@ if [[ -z "$remote_digest" ]]; then
     exit 1
 fi
 
-local_digest=$(podman image inspect --format '{{.Digest}}' "$IMAGE" 2>/dev/null || echo "")
+local_digest=$(podman image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null | cut -d@ -f2 || echo "")
 
 if [[ "$local_digest" == "$remote_digest" && -f "$RAW_PATH" ]]; then
     echo "  - Up to date (${remote_digest:0:19}), skipping."
