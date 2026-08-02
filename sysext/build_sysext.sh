@@ -142,7 +142,6 @@ cat > "$ROOTFS/usr/lib/extension-release.d/extension-release.hestia" <<EOF
 ID=fedora
 VERSION_ID=${RELEASEVER}
 ARCHITECTURE=${ARCH_ID}
-SYSEXT_LEVEL=1
 EOF
 
 
@@ -158,14 +157,9 @@ find "$ROOTFS" \
 
 echo "--- Building SquashFS ---"
 
-dnf5 -y install squashfs-utils >/dev/null
+dnf5 -y install erofs-utils >/dev/null
 
-mksquashfs \
-    "$ROOTFS" \
-    "$OUT" \
-    -noappend \
-    -comp zstd
-
+mkfs.erofs -zzstd "$OUT" "$ROOTFS"
 
 echo "=== Built Hestia sysext ==="
 du -h "$OUT"
