@@ -155,15 +155,12 @@ find "$ROOTFS" \
     -exec rm -rf {} +
 
 
-rm -f \
-    "$ROOTFS/usr/lib/os-release" \
-    "$ROOTFS/etc/os-release"
+rm -f "$ROOTFS/usr/lib/os-release"
 
 rm -rf "$ROOTFS/usr/share/man"
 rm -rf "$ROOTFS/usr/share/doc"
 rm -rf "$ROOTFS/usr/share/info"
 rm -rf "$ROOTFS/usr/share/licenses"
-rm -rf "$ROOTFS/var"
 
 
 echo "--- Building SquashFS ---"
