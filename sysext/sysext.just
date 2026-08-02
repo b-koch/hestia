@@ -288,6 +288,7 @@ download-rpms target arch=arch:
     if [[ -n "{{pre_commands}}" ]]; then
         pre_commands+="{{pre_commands}} ; "
     fi
+    echo "5a"
     if [[ -n "{{copr_repos}}" ]]; then
         pre_commands+="dnf install -y dnf5-plugins"
         for r in "{{copr_repos}}"; do
@@ -295,6 +296,7 @@ download-rpms target arch=arch:
         done
         pre_commands+=" ; "
     fi
+    echo "5b"
     if [[ -n "{{external_repos}}" ]]; thenContainerfile
         pre_commands+="dnf install -y dnf5-plugins"
         external_repos="$(echo "{{external_repos}}" | xargs)"
