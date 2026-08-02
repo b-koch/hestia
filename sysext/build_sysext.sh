@@ -163,11 +163,12 @@ rm -rf "$ROOTFS/usr/share/info"
 rm -rf "$ROOTFS/usr/share/licenses"
 
 
-echo "--- Building EROFS ---"
+echo "--- Exporting plain rootfs structure ---"
+cp -a "$ROOTFS"/* "$OUT_DIR"/
 
-dnf5 -y install erofs-utils selinux-policy-targeted >/dev/null
+echo "=== Prepared Hestia sysext payload ==="
+du -sh "$OUT_DIR"
 
-mkfs.erofs -zzstd --file-contexts=/etc/selinux/targeted/contexts/files/file_contexts "$OUT" "$ROOTFS"
 
 echo "=== Built Hestia sysext ==="
 du -h "$OUT"

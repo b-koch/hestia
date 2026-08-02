@@ -16,6 +16,7 @@ build tag="latest":
     #!/usr/bin/env bash
     set -euox pipefail
     podman build \
+        --compression-format=zstd:chunked \
         --tag "{{ registry }}/{{ image_name }}:{{ tag }}" \
         --file "{{ justfile_directory() }}/Containerfile" \
         "{{ justfile_directory() }}/.."
