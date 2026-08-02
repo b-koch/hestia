@@ -13,6 +13,7 @@ on:
       - '**/LICENSE'
       - '**/TODO.md'
       - 'tools/**'
+      - 'sysext/**'
   workflow_dispatch:
 
 env:

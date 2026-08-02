@@ -1,0 +1,93 @@
+# Community sourced systemd system extensions (sysexts) for Fedora image based systems
+
+**NOTE: This project is a work in progress. Make sure to read the [known
+limitations section](https://extensions.fcos.fr). Use at your own risk.**
+
+This repo gathers sysexts made from community provided sources, upstream build
+binaries and COPR packages.
+
+For sysexts built from Fedora packages only, see
+[extensions.fcos.fr/fedora](https://extensions.fcos.fr/fedora).
+
+For general explainations about systemd system extensions (sysexts) and how
+to use them, see the documentation from the main page:
+[extensions.fcos.fr](https://extensions.fcos.fr).
+
+## Disabling fetching tags
+
+This project uses GitHub releases to publish sysexts, and those releases also
+create Git tags, thus you might want to disable fetching tags for the remote
+using:
+
+```bash
+git config remote.origin.tagopt "--no-tags"
+```
+
+and then remove all local tags with:
+
+```bash
+git tag -l | xargs git tag -d > /dev/null
+```
+
+## Building
+
+Building those images currently require `root` privileges. The currently
+supported options for building those sysexts are:
+- using a rootless, privileged, non-SELinux confined container (such as a
+  toolbox/distrobox container), redirecting `podman` commands to run them on
+  the host:
+  ```
+  [toolbox]$ cat /usr/local/bin/podman
+  #!/bin/bash
+  executable="$(basename ${0})"
+  exec flatpak-spawn --host "${executable}" "${@}"
+  ```
+- Using nested podman containers (current path in CI).
+
+Make sure that you have the following packages installed:
+- `cpio`
+- `erofs-utils`
+- `jq`
+- [`just`](https://github.com/casey/just)
+- `podman` (only when not using the host redirection script above)
+- `wget`
+
+To build the `python` sysext:
+
+```
+$ cd python
+```
+
+List the supported target images:
+
+```
+$ just targets
+```
+
+Build the sysext for Fedora CoreOS *next*:
+
+```
+$ just build "quay.io/fedora/fedora-coreos:next"
+```
+
+## `extensions.fcos.fr` redirector
+
+A Caddy based redirector is hosted at `extensions.fcos.fr`. The configutation
+is available in the parent project's Caddyfile. It redirects URLs queried by
+`systemd-sysupdate` to GitHub releases where the sysexts are hosted in this
+repo.
+
+## Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md) for details about the CI setup specific to
+this repo.
+
+## Credits
+
+This project is heavily inspired by the work done by
+[Thilo](https://github.com/t-lo) on the
+[Flatcar sysext bakery](https://flatcar.github.io/sysext-bakery/).
+
+## Licenses
+
+See [LICENSES](LICENSES).
