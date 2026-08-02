@@ -1,5 +1,3 @@
 # One sysext app name per line. Each corresponds to a directory under
 # sysext/apps/ in the hestia-custom-bazzite-image repo and is pulled from
 # ghcr.io/b-koch/sysext-<name>:latest by hestia-sysext-fetch.service.
-bitwarden
-vscode

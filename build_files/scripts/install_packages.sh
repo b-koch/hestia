@@ -2,7 +2,7 @@
 set -euo pipefail
 source /ctx/lib/read_list.sh
 
-PACKAGES_INSTALL_DIR="/ctx/packages/install"
+PACKAGES_INSTALL_DIR="/ctx/definitions/packages/install"
 packages=()
 
 shopt -s nullglob

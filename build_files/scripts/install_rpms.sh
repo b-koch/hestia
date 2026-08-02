@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RPMS_INSTALL_DIR="/ctx/rpms/install"
+RPMS_INSTALL_DIR="/ctx/definitions/rpms/install"
 
 urls=()
 

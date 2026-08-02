@@ -2,8 +2,8 @@
 set -euo pipefail
 source /ctx/lib/read_list.sh
 
-FLATPAK_DIR="/ctx/flatpaks/install"
-OVERRIDE_DIR="/ctx/flatpaks/overrides"
+FLATPAK_DIR="/ctx/definitions/flatpaks/install"
+OVERRIDE_DIR="/ctx/definitions/flatpaks/overrides"
 
 SCRIPT="/usr/libexec/hestia/install-flatpaks"
 SERVICE="/usr/lib/systemd/system/hestia-flatpaks.service"

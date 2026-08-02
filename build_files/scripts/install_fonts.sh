@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euox pipefail
 
-FONTS_INSTALL_DIR="/ctx/fonts/install"
+FONTS_INSTALL_DIR="/ctx/definitions/fonts/install"
 
 executed_count=0
 

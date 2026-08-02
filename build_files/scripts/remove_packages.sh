@@ -2,7 +2,7 @@
 set -euo pipefail
 source /ctx/lib/read_list.sh
 
-for list in /ctx/packages/remove/*; do
+for list in /ctx/definitions/packages/remove/*; do
     [ -f "$list" ] || continue
 
     echo "Removing $(basename "$list")"
