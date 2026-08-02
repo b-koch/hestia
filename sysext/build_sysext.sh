@@ -139,8 +139,10 @@ echo "--- Writing extension metadata ---"
 mkdir -p "$ROOTFS/usr/lib/extension-release.d"
 
 cat > "$ROOTFS/usr/lib/extension-release.d/extension-release.hestia" <<EOF
-ID=_any
+ID=fedora
+VERSION_ID=${RELEASEVER}
 ARCHITECTURE=${ARCH_ID}
+SYSEXT_LEVEL=1
 EOF
 
 
