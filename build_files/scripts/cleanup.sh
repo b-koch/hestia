@@ -34,9 +34,11 @@ done
 dnf5 clean all
 
 # Clean temporary files
+sleep 2
 rm -rf /tmp/* || true
 
 # Cleanup the entirety of `/var`.
+sleep 2
 rm -rf /var
 mkdir -p /var/tmp
 chmod -R 1777 /var/tmp
