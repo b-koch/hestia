@@ -30,15 +30,11 @@ for target in "${REMNANTS[@]}"; do
   rm -rf "$target"
 done
 
-# Clean package manager cache
-dnf5 clean all
+# Clean non-mounted /var state left behind in the layer
+rm -rf /var/lib/dnf /var/lib/rpm-state /var/log/*
 
-# Clean temporary files
-rm -rf /tmp/* || true
-
-# Cleanup the entirety of `/var`.
-#rm -rf /var
-#mkdir -p /var/tmp
-#chmod -R 1777 /var/tmp
+# Ensure /var/tmp exists for ostree runtime
+mkdir -p /var/tmp
+chmod 1777 /var/tmp
 
 log "Cleanup completed"
