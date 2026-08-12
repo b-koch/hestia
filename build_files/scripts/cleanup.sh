@@ -30,4 +30,15 @@ for target in "${REMNANTS[@]}"; do
   rm -rf "$target"
 done
 
+# Clean package manager cache
+dnf5 clean all
+
+# Clean temporary files
+rm -rf /tmp/* || true
+
+# Cleanup the entirety of `/var`.
+rm -rf /var
+mkdir -p /var/tmp
+chmod -R 1777 /var/tmp
+
 log "Cleanup completed"

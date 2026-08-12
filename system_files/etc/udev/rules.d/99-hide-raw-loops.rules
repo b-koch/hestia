@@ -1,0 +1,1 @@
+SUBSYSTEM=="block", KERNEL=="loop*", ENV{ID_FS_USAGE}=="filesystem", PROGRAM=="/usr/bin/losetup --noheadings --output BACKING_FILE /dev/%k", RESULT=="*.raw", ENV{UDISKS_IGNORE}="1"
