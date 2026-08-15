@@ -67,16 +67,74 @@ jobs:
         run: |
           echo "IMAGE_REGISTRY=${{ steps.image-info.outputs.image_registry }}" >> ${GITHUB_ENV}
           echo "IMAGE_NAME=${{ steps.image-info.outputs.image_name }}" >> ${GITHUB_ENV}
-           
+
+      - name: Storage & disk diagnostics (pre-build)
+        run: |
+          mkdir -p /tmp/diag
+          {
+            echo "=== podman info (storage) ==="
+            sudo podman info --format json | jq '{graphDriverName: .store.graphDriverName, graphRoot: .store.graphRoot, graphStatus: .store.graphStatus, runRoot: .store.runRoot}'
+            echo
+            echo "=== relevant mounts ==="
+            mount | grep -E "overlay| / | /var | /home |containers"
+            echo
+            echo "=== disk usage ==="
+            df -hT
+            echo
+            echo "=== block devices ==="
+            lsblk -f || true
+            echo
+            echo "=== disk stats snapshot ==="
+            cat /proc/diskstats || true
+          } | tee /tmp/diag/pre-build-storage-info.log
+
       - name: Build Image
         id: build-image
         env:
           BASE_DIGEST: ${{ steps.image-info.outputs.base_digest }}
         run: |
+          set -euo pipefail
+          mkdir -p /tmp/diag
+
+          # Background sampler: capture disk I/O + free space every 15s
+          # for the duration of the build so we can see if any phase
+          # (e.g. layer commit) coincides with an I/O stall or throttling.
+          command -v iostat >/dev/null 2>&1 || sudo apt-get install -y sysstat >/dev/null 2>&1 || true
+          (
+            while true; do
+              echo "=== $(date -u +%FT%TZ) ==="
+              if command -v iostat >/dev/null 2>&1; then
+                iostat -x 1 2 2>&1 | tail -n +4
+              fi
+              df -h / /home 2>/dev/null
+              echo
+              sleep 15
+            done
+          ) >> /tmp/diag/build-iostat.log 2>&1 &
+          MONITOR_PID=$!
+          echo "monitor_pid=${MONITOR_PID}" >> "$GITHUB_OUTPUT"
+
+          set +e
           sudo -E $(command -v just) build \
             "${{ steps.image-info.outputs.image_name }}" \
             "${{ steps.image-info.outputs.default_tag }}" \
             "${BASE_DIGEST}"
+          BUILD_EXIT=$?
+          set -e
+
+          kill "${MONITOR_PID}" 2>/dev/null || true
+          wait "${MONITOR_PID}" 2>/dev/null || true
+
+          exit "${BUILD_EXIT}"
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/diag/
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Generate Build Tags
         id: gen-build-tags
