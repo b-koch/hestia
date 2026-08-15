@@ -115,7 +115,7 @@ jobs:
           echo "monitor_pid=${MONITOR_PID}" >> "$GITHUB_OUTPUT"
 
           set +e
-          sudo -E $(command -v just) build \
+          just build \
             "${{ steps.image-info.outputs.image_name }}" \
             "${{ steps.image-info.outputs.default_tag }}" \
             "${BASE_DIGEST}"
@@ -136,6 +136,13 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Rechunk with rpm-ostree
+        id: rechunk
+        run: |
+          just ostree-rechunk \
+            ${IMAGE_NAME} \
+            ${DEFAULT_TAG}
+
       - name: Generate Build Tags
         id: gen-build-tags
         run: |
@@ -149,7 +156,7 @@ jobs:
         env:
           ALIAS_TAGS: ${{ steps.gen-build-tags.outputs.alias_tags }}
         run: |
-          sudo -E $(command -v just) tag-images \
+          just tag-images \
             "${{ steps.image-info.outputs.image_name }}" \
             "${{ steps.image-info.outputs.default_tag }}" \
             "${ALIAS_TAGS}"
@@ -170,7 +177,7 @@ jobs:
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            sudo -E podman push --digestfile=/tmp/digestfile ${{ steps.image-info.outputs.image_name }}:${tag} ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}:${tag}
+            podman push --digestfile=/tmp/digestfile ${{ steps.image-info.outputs.image_name }}:${tag} ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}:${tag}
           done
 
           digest=$(< /tmp/digestfile)
@@ -190,4 +197,4 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push-image.outputs.digest }}
         run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}@${DIGEST}
+          cosign sign -y --new-bundle-format=false --use-signing-config=false --key env://COSIGN_PRIVATE_KEY ${IMAGE_REGISTRY}/${{ steps.image-info.outputs.image_name }}@${DIGEST}

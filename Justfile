@@ -20,7 +20,7 @@ default:
 # Check Just Syntax
 [group('Just')]
 check:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     find . -type f -name "*.just" | while read -r file; do
     	echo "Checking syntax: $file"
     	just --unstable --fmt --check -f $file
@@ -31,7 +31,7 @@ check:
 # Fix Just Syntax
 [group('Just')]
 fix:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     find . -type f -name "*.just" | while read -r file; do
     	echo "Checking syntax: $file"
     	just --unstable --fmt -f $file
@@ -42,7 +42,7 @@ fix:
 # Clean Repo
 [group('Utility')]
 clean:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     set -eoux pipefail
     touch _build
     find *_build* -exec rm -rf {} \;
@@ -61,22 +61,39 @@ sudo-clean:
 [group('Utility')]
 [private]
 sudoif command *args:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     function sudoif(){
         if [[ "${UID}" -eq 0 ]]; then
             "$@"
         elif [[ "$(command -v sudo)" && -n "${SSH_ASKPASS:-}" ]] && [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
-            /usr/bin/sudo --askpass "$@" || exit 1
+            sudo --askpass "$@" || exit 1
         elif [[ "$(command -v sudo)" ]]; then
-            /usr/bin/sudo "$@" || exit 1
+            sudo "$@" || exit 1
         else
             exit 1
         fi
     }
     sudoif {{ command }} {{ args }}
 
+# This Justfile recipe builds a container image using Podman.
+#
+# Arguments:
+#   $target_image - The tag you want to apply to the image (default: $image_name).
+#   $tag - The tag for the image (default: $default_tag).
+#
+# The script constructs the version string using the tag and the current date.
+# If the git working directory is clean, it also includes the short SHA of the current HEAD.
+#
+# just build $target_image $tag
+#
+# Example usage:
+#   just build myimage mytag
+#
+# This will build an image 'myimage:mytag'
+#
+
 # Build the image using the specified parameters
-build $target_image=image_name $tag=default_tag $base_digest="":
+build $target_image=image_name $tag=default_tag:
     #!/usr/bin/env bash
 
     set -euox pipefail
@@ -92,7 +109,8 @@ build $target_image=image_name $tag=default_tag $base_digest="":
         LABELS+=("--label" "org.opencontainers.image.version={{ default_tag }}.$(date +%Y%m%d)-${GIT_SHA}")
     fi
 
-    # Image metadata for https://artifacthub.io/
+    # Image metadata for https://artifacthub.io/ - This is optional but is highly recommended so we all can get a index of all the custom images
+    # The metadata by itself is not going to do anything, you choose if you want your image to be on ArtifactHub or not.
     LABELS+=("--label" "io.artifacthub.package.deprecated=false")
     LABELS+=("--label" "io.artifacthub.package.keywords={{ image_keywords }}")
     LABELS+=("--label" "io.artifacthub.package.license=Apache-2.0")
@@ -102,12 +120,6 @@ build $target_image=image_name $tag=default_tag $base_digest="":
     LABELS+=("--label" "org.opencontainers.image.description={{ image_desc }}")
     LABELS+=("--label" "org.opencontainers.image.title={{ image_name }}")
     LABELS+=("--label" "org.opencontainers.image.vendor={{ repo_organization }}")
-
-    # Inject base image digest label if provided
-    BASE_DIGEST="{{ base_digest }}"
-    if [[ -n "${BASE_DIGEST}" ]]; then
-        LABELS+=("--label" "org.opencontainers.image.base.digest=${BASE_DIGEST}")
-    fi
 
     # This actually builds the image!
     PODMAN_BUILD_ARGS=("${BUILD_ARGS[@]}" "${LABELS[@]}" --pull=newer --tag "${target_image}:${tag}" --file Containerfile)
@@ -120,6 +132,7 @@ rechunk $target_image=image_name $tag=default_tag:
 
     set -xeuo pipefail
 
+    # TODO: pin chunkah image to hash once mature enough
     # You may run into space issues on github runners as we are making a
     # complete copy of the image, which likely has no shared layers, unless your
     # base image is also using chunkah
@@ -136,7 +149,6 @@ rechunk $target_image=image_name $tag=default_tag:
       --mount=type=image,src="${target_image}:${tag}",target=/chunkah \
       -v "${CHUNKAH_CONFIG_FILE}:/chunkah-config.json:ro,Z" \
       -v "${CHUNKAH_OUTPUT_DIR}:/run/out:Z" \
-      -e SOURCE_DATE_EPOCH=0 \
       quay.io/coreos/chunkah:latest \
       build \
       --verbose \
@@ -156,25 +168,29 @@ ostree-rechunk $target_image=image_name $tag=default_tag:
 
     set -xeuo pipefail
 
-    if [[ ! "${UID}" -eq "0" ]]; then
-      echo "This needs to run as root."
-      exit 1
-    fi
+    # Use the already-built local image to avoid pulling from a remote registry
+    RPM_OSTREE_CHUNKER_IMAGE="localhost/${target_image}:${tag}"
 
-    RPM_OSTREE_CHUNKER_IMAGE="quay.io/fedora/fedora-bootc:latest"
+    RPM_OSTREE_OUTPUT_DIR="$(mktemp -d ./"${target_image}"_rpm-ostree_XXXXXX)"
+
+    trap 'rm -rf "${RPM_OSTREE_OUTPUT_DIR}"' EXIT
 
     podman run --rm \
-      --pull=newer \
+      --pull=never \
+      --mount=type=image,src="${target_image}:${tag}",target=/rpm-ostree \
       --privileged \
-      -v "/var/lib/containers:/var/lib/containers" \
+      -v "${RPM_OSTREE_OUTPUT_DIR}:/run/out:Z" \
       --entrypoint /usr/bin/rpm-ostree \
       "${RPM_OSTREE_CHUNKER_IMAGE}" \
       compose build-chunked-oci \
       --max-layers 127 \
       --format-version=2 \
       --bootc \
-      --from "localhost/${target_image}:${tag}" \
-      --output containers-storage:"localhost/${target_image}:${tag}"
+      --rootfs /rpm-ostree \
+      --output oci-archive:/run/out/"${target_image}.oci"
+
+    CHUNKED_IMAGE="$(podman pull oci-archive:"${RPM_OSTREE_OUTPUT_DIR}/${target_image}.oci")"
+    podman tag "${CHUNKED_IMAGE}" "${target_image}:${tag}"
 
 # Generate Default Tag
 [group('Utility')]
@@ -187,7 +203,7 @@ generate-default-tag $tag=default_tag:
 # Generate Tags
 [group('Utility')]
 generate-build-tags $target_image=image_name $tag=default_tag:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     set -eoux pipefail
 
     DATE=$(date +%Y%m%d)
@@ -232,15 +248,34 @@ image_name $target_image=image_name:
 
     echo "${image_name}"
 
+# Command: _rootful_load_image
+# Description: This script checks if the current user is root or running under sudo. If not, it attempts to resolve the image tag using podman inspect.
+#              If the image is found, it loads it into rootful podman. If the image is not found, it pulls it from the repository.
+#
+# Parameters:
+#   $target_image - The name of the target image to be loaded or pulled.
+#   $tag - The tag of the target image to be loaded or pulled. Default is 'default_tag'.
+#
+# Example usage:
+#   _rootful_load_image my_image latest
+#
+# Steps:
+# 1. Check if the script is already running as root or under sudo.
+# 2. Check if target image is in the non-root podman container storage)
+# 3. If the image is found, load it into rootful podman using podman scp.
+# 4. If the image is not found, pull it from the remote repository into reootful podman.
+
 _rootful_load_image $target_image=image_name $tag=default_tag:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     set -eoux pipefail
 
+    # Check if already running as root or under sudo
     if [[ -n "${SUDO_USER:-}" || "${UID}" -eq "0" ]]; then
         echo "Already root or running under sudo, no need to load image from user podman."
         exit 0
     fi
 
+    # Try to resolve the image tag using podman inspect
     set +e
     resolved_tag=$(podman inspect -t image "${target_image}:${tag}" | jq -r '.[].RepoTags.[0]')
     return_code=$?
@@ -249,16 +284,28 @@ _rootful_load_image $target_image=image_name $tag=default_tag:
     USER_IMG_ID=$(podman images --filter reference="${target_image}:${tag}" --format "'{{ '{{.ID}}' }}'")
 
     if [[ $return_code -eq 0 ]]; then
+        # If the image is found, load it into rootful podman
         ID=$(just sudoif podman images --filter reference="${target_image}:${tag}" --format "'{{ '{{.ID}}' }}'")
         if [[ "$ID" != "$USER_IMG_ID" ]]; then
+            # If the image ID is not found or different from user, copy the image from user podman to root podman
             COPYTMP=$(mktemp -p "${PWD}" -d -t _build_podman_scp.XXXXXXXXXX)
             just sudoif TMPDIR=${COPYTMP} podman image scp ${UID}@localhost::"${target_image}:${tag}" root@localhost::"${target_image}:${tag}"
             rm -rf "${COPYTMP}"
         fi
     else
+        # If the image is not found, pull it from the repository
         just sudoif podman pull "${target_image}:${tag}"
     fi
 
+# Build a bootc bootable image using Bootc Image Builder (BIB)
+# Converts a container image to a bootable image
+# Parameters:
+#   target_image: The name of the image to build (ex. localhost/fedora)
+#   tag: The tag of the image to build (ex. latest)
+#   type: The type of image to build (ex. qcow2, raw, iso)
+#   config: The configuration file to use for the build (default: disk_config/disk.toml)
+
+# Example: just _rebuild-bib localhost/fedora latest qcow2 disk_config/disk.toml
 _build-bib $target_image $tag $type $config: (_rootful_load_image target_image tag)
     #!/usr/bin/env bash
     set -euo pipefail
@@ -288,6 +335,14 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
     sudo rmdir $BUILDTMP
     sudo chown -R $USER:$USER output/
 
+# Podman builds the image from the Containerfile and creates a bootable image
+# Parameters:
+#   target_image: The name of the image to build (ex. localhost/fedora)
+#   tag: The tag of the image to build (ex. latest)
+#   type: The type of image to build (ex. qcow2, raw, iso)
+#   config: The configuration file to use for the build (deafult: disk_config/disk.toml)
+
+# Example: just _rebuild-bib localhost/fedora latest qcow2 disk_config/disk.toml
 _rebuild-bib $target_image $tag $type $config: (build target_image tag) && (_build-bib target_image tag type config)
 
 # Build a QCOW2 virtual machine image
@@ -314,19 +369,23 @@ rebuild-raw $target_image=("localhost/" + image_name) $tag=default_tag: && (_reb
 [group('Build Virtal Machine Image')]
 rebuild-iso $target_image=("localhost/" + image_name) $tag=default_tag: && (_rebuild-bib target_image tag "iso" "disk_config/iso.toml")
 
+# Run a virtual machine with the specified image type and configuration
 _run-vm $target_image $tag $type $config:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     set -eoux pipefail
 
+    # Determine the image file based on the type
     image_file="output/${type}/disk.${type}"
     if [[ $type == iso ]]; then
         image_file="output/bootiso/install.iso"
     fi
 
+    # Build the image if it does not exist
     if [[ ! -f "${image_file}" ]]; then
         just "build-${type}" "$target_image" "$tag"
     fi
 
+    # Determine an available port to use
     port=8006
     while grep -q :${port} <<< $(ss -tunalp); do
         port=$(( port + 1 ))
@@ -334,6 +393,7 @@ _run-vm $target_image $tag $type $config:
     echo "Using Port: ${port}"
     echo "Connect to http://localhost:${port}"
 
+    # Set up the arguments for running the VM
     run_args=()
     run_args+=(--rm --privileged)
     run_args+=(--pull=newer)
@@ -347,6 +407,7 @@ _run-vm $target_image $tag $type $config:
     run_args+=(--volume "${PWD}/${image_file}":"/boot.${type}")
     run_args+=(docker.io/qemux/qemu)
 
+    # Run the VM and open the browser to connect
     (sleep 30 && xdg-open http://localhost:"$port") &
     podman run "${run_args[@]}"
 
@@ -375,7 +436,7 @@ spawn-vm rebuild="0" type="qcow2" ram="6G":
       -M "bootc-image" \
       --console=gui \
       --cpus=2 \
-      --ram=$(echo {{ ram }}| /usr/bin/numfmt --from=iec) \
+      --ram=$(echo {{ ram }}| numfmt --from=iec) \
       --network-user-mode \
       --vsock=false --pass-ssh-key=false \
       -i ./output/**/*.{{ type }}
@@ -384,18 +445,22 @@ spawn-vm rebuild="0" type="qcow2" ram="6G":
 lint:
     #!/usr/bin/env bash
     set -eoux pipefail
+    # Check if shellcheck is installed
     if ! command -v shellcheck &> /dev/null; then
         echo "shellcheck could not be found. Please install it."
         exit 1
     fi
-    /usr/bin/find . -iname "*.sh" -type f -exec shellcheck "{}" ';'
+    # Run shellcheck on all Bash scripts
+    find . -iname "*.sh" -type f -exec shellcheck "{}" ';'
 
 # Runs shfmt on all Bash scripts
 format:
     #!/usr/bin/env bash
     set -eoux pipefail
+    # Check if shfmt is installed
     if ! command -v shfmt &> /dev/null; then
         echo "shfmt could not be found. Please install it."
         exit 1
     fi
-    /usr/bin/find . -iname "*.sh" -type f -exec shfmt --write "{}" ';'
+    # Run shfmt on all Bash scripts
+    find . -iname "*.sh" -type f -exec shfmt --write "{}" ';'
