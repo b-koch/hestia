@@ -93,7 +93,7 @@ sudoif command *args:
 #
 
 # Build the image using the specified parameters
-build $target_image=image_name $tag=default_tag:
+build $target_image=image_name $tag=default_tag $base_digest="":
     #!/usr/bin/env bash
 
     set -euox pipefail
@@ -120,6 +120,12 @@ build $target_image=image_name $tag=default_tag:
     LABELS+=("--label" "org.opencontainers.image.description={{ image_desc }}")
     LABELS+=("--label" "org.opencontainers.image.title={{ image_name }}")
     LABELS+=("--label" "org.opencontainers.image.vendor={{ repo_organization }}")
+
+    # Inject base image digest label if provided
+    BASE_DIGEST="{{ base_digest }}"
+    if [[ -n "${BASE_DIGEST}" ]]; then
+        LABELS+=("--label" "org.opencontainers.image.base.digest=${BASE_DIGEST}")
+    fi
 
     # This actually builds the image!
     PODMAN_BUILD_ARGS=("${BUILD_ARGS[@]}" "${LABELS[@]}" --pull=newer --tag "${target_image}:${tag}" --file Containerfile)
