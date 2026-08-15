@@ -78,12 +78,12 @@ jobs:
             "${{ steps.image-info.outputs.default_tag }}" \
             "${BASE_DIGEST}"
 
-      - name: Rechunk with rpm-ostree
-        id: rechunk
-        run: |
-          just ostree-rechunk \
-            ${IMAGE_NAME} \
-            ${DEFAULT_TAG}
+      # - name: Rechunk with rpm-ostree
+      #   id: rechunk
+      #   run: |
+      #     just ostree-rechunk \
+      #       ${IMAGE_NAME} \
+      #       ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
