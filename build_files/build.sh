@@ -22,8 +22,9 @@ echo "Installing flatpaks..."
 echo "Installing fonts..."
 /ctx/scripts/install_fonts.sh
 
-echo "Applying configuration..."
-/ctx/scripts/configure.sh
+echo "Applying configurations..."
+/ctx/scripts/configure_gnome_extensions.sh
+/ctx/scripts/configure.sh # should be the last configuration script to be run
 
 echo "Enabling Hestia sysext auto-update..."
 /ctx/scripts/enable_hestia_sysext.sh

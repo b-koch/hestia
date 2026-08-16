@@ -1,0 +1,7 @@
+{
+  "uuid": "force-max-brightness@b-koch.github.com",
+  "name": "Force Max Brightness",
+  "description": "Forces the brightness scale to max on login and monitor reconnects (workaround for HDR SDR-brightness not persisting across boots).",
+  "shell-version": ["49", "50"],
+  "version": 1
+}
