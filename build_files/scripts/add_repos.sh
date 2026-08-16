@@ -3,7 +3,7 @@ set -euo pipefail
 
 mkdir -p /etc/yum.repos.d
 
-# Dynamically ask RPM what Fedora version is currently running
+# Check which Fedora version is currently running
 RELEASEVER="$(rpm -E '%{fedora}' 2>/dev/null)"
 
 for repo in /ctx/repos/*.repo; do
@@ -15,7 +15,7 @@ for repo in /ctx/repos/*.repo; do
     # Extract gpgkey lines, automatically replace variables, and import them
     while IFS= read -r key_url; do
         if [[ -n "$key_url" ]]; then
-            # Automatically swaps out $releasever / ${releasever} with the live version
+            # Swaps out $releasever / ${releasever} with the live version
             key_url="${key_url//\$releasever/$RELEASEVER}"
             key_url="${key_url//\$\{releasever\}/$RELEASEVER}"
 

@@ -93,13 +93,13 @@ jobs:
       #       "${{ steps.image-info.outputs.image_name }}" \
       #       "${{ steps.image-info.outputs.default_tag }}"
 
-      # https://github.com/coreos/chunkah
-      #- name: Rechunk with Chunkah
-      #  id: rechunk
-      #  run: |
-      #    just rechunk \
-      #      "${{ steps.image-info.outputs.image_name }}" \
-      #      "${{ steps.image-info.outputs.default_tag }}"
+      # # https://github.com/coreos/chunkah
+      # - name: Rechunk with Chunkah
+      #   id: rechunk
+      #   run: |
+      #     just rechunk \
+      #       "${{ steps.image-info.outputs.image_name }}" \
+      #       "${{ steps.image-info.outputs.default_tag }}"
 
       - name: Generate Build Tags
         id: gen-build-tags

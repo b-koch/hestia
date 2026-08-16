@@ -1,21 +1,19 @@
 #!/usr/bin/bash
-set -euo pipefail
-
-trap '[[ $BASH_COMMAND != echo* ]] && [[ $BASH_COMMAND != log* ]] && echo "+ $BASH_COMMAND"' DEBUG
+set -euxo pipefail
 
 log() {
-  echo "=== $* ==="
+  echo "$*..."
 }
 
 log "Starting system cleanup"
 
-# Delete broken icon symlinks
+log "Deleting broken icon symlinks"
 find /usr/share/icons -xtype l -delete
 
 # Remove autostart files
 # Example: rm /etc/skel/.config/autostart/steam.desktop
 
-# Remove remnants
+log "Removing remnants"
 REMNANTS=(
   "/usr/share/applications/Waydroid"
   "/usr/share/applications/waydroid-container-restart.desktop"
@@ -30,10 +28,10 @@ for target in "${REMNANTS[@]}"; do
   rm -rf "$target"
 done
 
-# Clean non-mounted /var state left behind in the layer
+log "Cleaning non-mounted /var state left behind in the layer"
 rm -rf /var/lib/dnf /var/lib/rpm-state /var/log/*
 
-# Ensure /var/tmp exists for ostree runtime
+log "Ensuring /var/tmp exists for ostree runtime"
 mkdir -p /var/tmp
 chmod 1777 /var/tmp
 

@@ -135,34 +135,30 @@ printf '  %s\n' "${disabled_extensions[@]:-<none>}"
 # ---------------------------------------------------------------------------
 
 for extension in "${ENABLE_EXTENSIONS[@]}"; do
-    if contains "$extension" "${disabled_extensions[@]}"; then
-        echo "Enabling: $extension"
+    echo "Enabling: $extension"
 
+    if contains "$extension" "${disabled_extensions[@]}"; then
         mapfile -t disabled_extensions < <(
             remove_item "$extension" "${disabled_extensions[@]}"
         )
+    fi
 
-        if ! contains "$extension" "${enabled_extensions[@]}"; then
-            enabled_extensions+=("$extension")
-        fi
-    else
-        echo "Not disabled, ignoring enable request: $extension"
+    if ! contains "$extension" "${enabled_extensions[@]}"; then
+        enabled_extensions+=("$extension")
     fi
 done
 
 for extension in "${DISABLE_EXTENSIONS[@]}"; do
-    if contains "$extension" "${enabled_extensions[@]}"; then
-        echo "Disabling: $extension"
+    echo "Disabling: $extension"
 
+    if contains "$extension" "${enabled_extensions[@]}"; then
         mapfile -t enabled_extensions < <(
             remove_item "$extension" "${enabled_extensions[@]}"
         )
+    fi
 
-        if ! contains "$extension" "${disabled_extensions[@]}"; then
-            disabled_extensions+=("$extension")
-        fi
-    else
-        echo "Not enabled, ignoring disable request: $extension"
+    if ! contains "$extension" "${disabled_extensions[@]}"; then
+        disabled_extensions+=("$extension")
     fi
 done
 

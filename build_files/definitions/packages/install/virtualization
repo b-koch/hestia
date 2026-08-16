@@ -2,7 +2,7 @@ qemu
 libvirt
 qemu-kvm
 virt-manager
-edk2-ovmf
+#edk2-ovmf
 swtpm
 swtpm-tools
 guestfs-tools

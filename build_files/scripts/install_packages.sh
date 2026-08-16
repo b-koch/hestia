@@ -14,9 +14,8 @@ if [ -d "$PACKAGES_INSTALL_DIR" ]; then
             echo "Reading package file: $(basename "$file")"
 
             while IFS= read -r pkg; do
-                echo "  read_list returned: '$pkg'"
                 packages+=("$pkg")
-                echo "  added to array:     '$pkg'"
+                echo "  '$pkg'"
             done < <(read_list "$file")
         fi
     done
