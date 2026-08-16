@@ -32,6 +32,7 @@ jobs:
       
   build_push:
     name: Build and push image
+    needs: update-extensions
     runs-on: ubuntu-24.04
 
     permissions:
