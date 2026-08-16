@@ -7,12 +7,12 @@ binaries/
 *.erofs
 *.raw
 *.rpm
-version
-version_id
-inputs
-digest
-scripts
-json
+#version
+#version_id
+#inputs
+#digest
+#scripts
+#json
 /.dnf-cache/
 /docs/*/
 # Local EROFS sysext build output
