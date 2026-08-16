@@ -6,14 +6,14 @@ TARGET_DIR="${REPO_ROOT}/system_files/usr/share/gnome-shell/extensions"
 
 EXTENSIONS=(
     #Example: "8834:copyous@boerdereinar.dev"
-    "9184:advanced-media-controller@sanjai.com",
-    "4269:AlphabeticalAppGrid@stuarthayhurst",
-    "9308:bluetooth-battery-monitor@v8v88v8v88.com",
-    "8834:copyous@boerdereinar.dev",
-    "5410:grand-theft-focus@zalckos.github.com",
-    "4099:no-overwiew@fthx",
-    "4691:pip-on-top@rafostar.github.com",
-    "7048:rounded-window-corners@fxgn",
+    "9184:advanced-media-controller@sanjai.com"
+    "4269:AlphabeticalAppGrid@stuarthayhurst"
+    "9308:bluetooth-battery-monitor@v8v88v8v88.com"
+    "8834:copyous@boerdereinar.dev"
+    "5410:grand-theft-focus@zalckos.github.com"
+    "4099:no-overwiew@fthx"
+    "4691:pip-on-top@rafostar.github.com"
+    "7048:rounded-window-corners@fxgn"
     "355:status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "5470:weatheroclock@CleaMenezesJr.github.io"
 )
@@ -29,11 +29,19 @@ for entry in "${EXTENSIONS[@]}"; do
 
     echo "Checking ${UUID} (PK: ${PK})..."
 
-    # Query latest release without specifying shell_version
+    # Query general extension info to get the shell_version_map
     API_URL="https://extensions.gnome.org/extension-info/?pk=${PK}"
     REMOTE_JSON=$(curl -s "${API_URL}")
-    REMOTE_VERSION=$(echo "${REMOTE_JSON}" | jq -r '.version')
-    DOWNLOAD_PATH=$(echo "${REMOTE_JSON}" | jq -r '.download_url')
+
+    # Find the highest GNOME shell version key dynamically and get its version
+    #MAX_SHELL=$(echo "${REMOTE_JSON}" | jq -r '.shell_version_map | to_entries | max_by(.key | tonumber) | .key')
+    MAX_SHELL=$(echo "${REMOTE_JSON}" | jq -r '.shell_version_map | to_entries | map(select(.key | test("^[0-9]+$"))) | max_by(.key | tonumber) | .key')
+    REMOTE_VERSION=$(echo "${REMOTE_JSON}" | jq -r --arg max "$MAX_SHELL" '.shell_version_map[$max].version')
+
+    # Query the API again with that specific shell version to get the corresponding download_url
+    VERSIONED_API_URL="https://extensions.gnome.org/extension-info/?pk=${PK}&shell_version=${MAX_SHELL}"
+    VERSIONED_JSON=$(curl -s "${VERSIONED_API_URL}")
+    DOWNLOAD_PATH=$(echo "${VERSIONED_JSON}" | jq -r '.download_url')
 
     if [ "${REMOTE_VERSION}" == "null" ] || [ -z "${DOWNLOAD_PATH}" ] || [ "${DOWNLOAD_PATH}" == "null" ]; then
         echo "  -> Warning: Could not fetch info for ${UUID}. Skipping."

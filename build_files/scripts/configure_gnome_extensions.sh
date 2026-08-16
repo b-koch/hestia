@@ -3,28 +3,28 @@
 set -euo pipefail
 
 ENABLE_EXTENSIONS=(
-    "force-max-brightness@b-koch.github.com",
-    "caffeine@patapon.info",
-    "advanced-media-controller@sanjai.com",
-    "AlphabeticalAppGrid@stuarthayhurst",
-    "copyous@boerdereinar.dev",
-    "grand-theft-focus@zalckos.github.com",
-    "no-overwiew@fthx",
-    "pip-on-top@rafostar.github.com",
-    "rounded-window-corners@fxgn",
+    "force-max-brightness@b-koch.github.com"
+    "caffeine@patapon.info"
+    "advanced-media-controller@sanjai.com"
+    "AlphabeticalAppGrid@stuarthayhurst"
+    "copyous@boerdereinar.dev"
+    "grand-theft-focus@zalckos.github.com"
+    "no-overwiew@fthx"
+    "pip-on-top@rafostar.github.com"
+    "rounded-window-corners@fxgn"
     "status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "weatheroclock@CleaMenezesJr.github.io"
     "bluetooth-battery-monitor@v8v88v8v88.com"
 )
 
 DISABLE_EXTENSIONS=(
-    "block-caribou-36@lxylxy123456.ercli.dev",
-    "blur-my-shell@aunetx",
-    "burn-my-windows@schneegans.github.com",
-    "compiz-alike-magic-lamp-effect@hermes83.github.com",
-    "compiz-windows-effect@hermes83.github.com",
-    "desktop-cube@schneegans.github.com",
-    "gsconnect@andyholmes.github.io",
+    "block-caribou-36@lxylxy123456.ercli.dev"
+    "blur-my-shell@aunetx"
+    "burn-my-windows@schneegans.github.com"
+    "compiz-alike-magic-lamp-effect@hermes83.github.com"
+    "compiz-windows-effect@hermes83.github.com"
+    "desktop-cube@schneegans.github.com"
+    "gsconnect@andyholmes.github.io"
     "user-theme@gnome-shell-extensions.gcampax.github.com"
 )
 
