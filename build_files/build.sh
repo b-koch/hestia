@@ -22,24 +22,27 @@ echo "Installing flatpaks..."
 echo "Installing fonts..."
 /ctx/scripts/install_fonts.sh
 
+echo "Disabling repositories..."
+/ctx/scripts/disable_repos.sh
+
+echo "Fixing Softmaker Office NX icons..."
+/ctx/scripts/fix_softmaker_icons.sh
+
+echo "Updating ujust imports..."
+/ctx/scripts/update-ujust-imports.sh
+
 echo "Applying configurations..."
 /ctx/scripts/configure_gnome_extensions.sh
 /ctx/scripts/configure.sh # should be the last configuration script to be run
 
-echo "Enabling Hestia sysext auto-update..."
-/ctx/scripts/enable_hestia_sysext.sh
+#echo "Enabling Hestia sysext auto-update..."
+#/ctx/scripts/enable_hestia_sysext.sh
 
-echo "Disable repositories..."
-/ctx/scripts/disable_repos.sh
-
-echo "Add Hestia branding..."
+echo "Adding Hestia branding..."
 /ctx/scripts/hestia_branding.sh
 
-echo "Build initramfs"
+echo "Building initramfs..."
 /ctx/scripts/build-initramfs.sh
-
-echo "Fixing Softmaker Office NX icons"
-/ctx/scripts/fix_softmaker_icons.sh
 
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh

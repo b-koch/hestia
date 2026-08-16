@@ -1,3 +1,4 @@
+# This file is supposed to be run manually to update the .repo (dnf) files in this git-repository.
 #!/usr/bin/env bash
 set -euo pipefail
 

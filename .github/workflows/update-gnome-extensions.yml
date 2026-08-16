@@ -18,7 +18,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq curl unzip glib2.50-utils || sudo apt-get install -y libglib2.0-bin
 
       - name: Run extension updater
-        run: bash tools/fetch_extensions.sh
+        run: bash build_files/scripts/fetch_extensions.sh
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5

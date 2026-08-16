@@ -5,7 +5,8 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 TARGET_DIR="${REPO_ROOT}/system_files/usr/share/gnome-shell/extensions"
 
 EXTENSIONS=(
-    #Example: "8834:copyous@boerdereinar.dev"
+    # "https://extensions.gnome.org/extension/extension-id:UUID"
+    # Example: "8834:copyous@boerdereinar.dev"
     "9184:advanced-media-controller@sanjai.com"
     "4269:AlphabeticalAppGrid@stuarthayhurst"
     "9308:bluetooth-battery-monitor@v8v88v8v88.com"
@@ -33,8 +34,7 @@ for entry in "${EXTENSIONS[@]}"; do
     API_URL="https://extensions.gnome.org/extension-info/?pk=${PK}"
     REMOTE_JSON=$(curl -s "${API_URL}")
 
-    # Find the highest GNOME shell version key dynamically and get its version
-    #MAX_SHELL=$(echo "${REMOTE_JSON}" | jq -r '.shell_version_map | to_entries | max_by(.key | tonumber) | .key')
+    # Find the highest GNOME shell version key dynamically and get its version while ignoring legacy versions.
     MAX_SHELL=$(echo "${REMOTE_JSON}" | jq -r '.shell_version_map | to_entries | map(select(.key | test("^[0-9]+$"))) | max_by(.key | tonumber) | .key')
     REMOTE_VERSION=$(echo "${REMOTE_JSON}" | jq -r --arg max "$MAX_SHELL" '.shell_version_map[$max].version')
 
