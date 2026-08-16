@@ -1,0 +1,32 @@
+name: Update GNOME Extensions
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq curl unzip glib2.50-utils || sudo apt-get install -y libglib2.0-bin
+
+      - name: Run extension updater
+        run: bash tools/fetch_extensions.sh
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-update GNOME extensions"
+          file_pattern: "system_files/usr/share/gnome-shell/extensions/*"

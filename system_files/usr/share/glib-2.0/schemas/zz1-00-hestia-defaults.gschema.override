@@ -81,3 +81,6 @@ accent-color='blue'
 [org.gnome.desktop.screensaver]
 primary-color='#023c88'
 secondary-color='#5789ca'
+
+[org.gnome.shell]
+disable-extension-version-validation=true

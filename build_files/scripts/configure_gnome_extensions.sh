@@ -14,6 +14,7 @@ ENABLE_EXTENSIONS=(
     "rounded-window-corners@fxgn",
     "status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "weatheroclock@CleaMenezesJr.github.io"
+    "bluetooth-battery-monitor@v8v88v8v88.com"
 )
 
 DISABLE_EXTENSIONS=(
