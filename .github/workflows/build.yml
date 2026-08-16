@@ -25,6 +25,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
+  update-extensions:
+    uses: ./.github/workflows/update-gnome-extensions.yml
+    permissions:
+      contents: write
+      
   build_push:
     name: Build and push image
     runs-on: ubuntu-24.04

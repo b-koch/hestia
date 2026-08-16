@@ -1,18 +1,7 @@
 name: Update GNOME Extensions
 on:
+  workflow_call:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'
-  push:
-    branches:
-      - main
-    paths:
-      - 'tools/fetch_extensions.sh'
-      - '.github/workflows/update-gnome-extensions.yml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build-and-commit:
