@@ -21,8 +21,8 @@ env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && github.run_id || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
+  cancel-in-progress: true
 
 jobs:
   update-extensions:
@@ -60,7 +60,8 @@ jobs:
         run: |
           IMAGE_NAME=$(just image_name)
           DEFAULT_TAG=$(just generate-default-tag)
-          BASE_IMAGE="ghcr.io/ublue-os/bazzite-gnome:stable"
+          BASE_IMAGE=$(awk 'toupper($0) ~ /^FROM/ && toupper($0) !~ / AS / {print $2; exit}' Containerfile)
+          echo "Using base image: ${BASE_IMAGE}"
           
           # Fetch current SHA256 digest of the upstream base image
           BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
@@ -89,8 +90,16 @@ jobs:
       #   id: rechunk
       #   run: |
       #     just ostree-rechunk \
-      #       ${IMAGE_NAME} \
-      #       ${DEFAULT_TAG}
+      #       "${{ steps.image-info.outputs.image_name }}" \
+      #       "${{ steps.image-info.outputs.default_tag }}"
+
+      # https://github.com/coreos/chunkah
+      #- name: Rechunk with Chunkah
+      #  id: rechunk
+      #  run: |
+      #    just rechunk \
+      #      "${{ steps.image-info.outputs.image_name }}" \
+      #      "${{ steps.image-info.outputs.default_tag }}"
 
       - name: Generate Build Tags
         id: gen-build-tags
