@@ -63,8 +63,7 @@ jobs:
           BASE_IMAGE=$(awk 'toupper($0) ~ /^FROM/ && toupper($0) !~ / AS / {print $2; exit}' Containerfile)
           echo "Using base image: ${BASE_IMAGE}"
           
-          # Fetch current SHA256 digest of the upstream base image
-          BASE_DIGEST=$(skopeo inspect docker://$BASE_IMAGE | jq -r '.Digest')
+          BASE_DIGEST="${BASE_IMAGE##*@}"
 
           echo "image_name=${IMAGE_NAME,,}" >> $GITHUB_OUTPUT
           echo "default_tag=${DEFAULT_TAG}" >> $GITHUB_OUTPUT
@@ -86,20 +85,13 @@ jobs:
             "${{ steps.image-info.outputs.default_tag }}" \
             "${BASE_DIGEST}"
 
-      # - name: Rechunk with rpm-ostree
-      #   id: rechunk
-      #   run: |
-      #     just ostree-rechunk \
-      #       "${{ steps.image-info.outputs.image_name }}" \
-      #       "${{ steps.image-info.outputs.default_tag }}"
-
-      # # https://github.com/coreos/chunkah
-      # - name: Rechunk with Chunkah
-      #   id: rechunk
-      #   run: |
-      #     just rechunk \
-      #       "${{ steps.image-info.outputs.image_name }}" \
-      #       "${{ steps.image-info.outputs.default_tag }}"
+      # https://github.com/coreos/chunkah
+      - name: Rechunk with Chunkah
+        id: rechunk
+        run: |
+          just rechunk \
+            "${{ steps.image-info.outputs.image_name }}" \
+            "${{ steps.image-info.outputs.default_tag }}"
 
       - name: Generate Build Tags
         id: gen-build-tags
