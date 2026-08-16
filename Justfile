@@ -132,7 +132,7 @@ build $target_image=image_name $tag=default_tag $base_digest="":
 
     podman build "${PODMAN_BUILD_ARGS[@]}" .
 
-# Split the image for smaller updates (New)!
+# Split the image for smaller updates
 rechunk $target_image=image_name $tag=default_tag:
     #!/usr/bin/env bash
 
@@ -166,36 +166,6 @@ rechunk $target_image=image_name $tag=default_tag:
       --output oci:/run/out/chunked
 
     CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
-    podman tag "${CHUNKED_IMAGE}" "${target_image}:${tag}"
-
-# Split the image for smaller updates (Classical)!
-ostree-rechunk $target_image=image_name $tag=default_tag:
-    #!/usr/bin/env bash
-
-    set -xeuo pipefail
-
-    # Use the already-built local image to avoid pulling from a remote registry
-    RPM_OSTREE_CHUNKER_IMAGE="localhost/${target_image}:${tag}"
-
-    RPM_OSTREE_OUTPUT_DIR="$(mktemp -d ./"${target_image}"_rpm-ostree_XXXXXX)"
-
-    trap 'rm -rf "${RPM_OSTREE_OUTPUT_DIR}"' EXIT
-
-    podman run --rm \
-      --pull=never \
-      --mount=type=image,src="${target_image}:${tag}",target=/rpm-ostree \
-      --privileged \
-      -v "${RPM_OSTREE_OUTPUT_DIR}:/run/out:Z" \
-      --entrypoint /usr/bin/rpm-ostree \
-      "${RPM_OSTREE_CHUNKER_IMAGE}" \
-      compose build-chunked-oci \
-      --max-layers 127 \
-      --format-version=2 \
-      --bootc \
-      --rootfs /rpm-ostree \
-      --output oci-archive:/run/out/"${target_image}.oci"
-
-    CHUNKED_IMAGE="$(podman pull oci-archive:"${RPM_OSTREE_OUTPUT_DIR}/${target_image}.oci")"
     podman tag "${CHUNKED_IMAGE}" "${target_image}:${tag}"
 
 # Generate Default Tag
