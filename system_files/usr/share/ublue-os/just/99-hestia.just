@@ -4,6 +4,7 @@ hestia-disable-suspend:
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
     gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'blank'
 
+[group("hestia")]
 hestia-set-workspace-shortcuts:
     #!/usr/bin/bash
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Left', '<Super>less']"
@@ -11,10 +12,12 @@ hestia-set-workspace-shortcuts:
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Shift><Super>Left', '<Shift><Super>less']"
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Shift><Super>Right', '<Shift><Super>y']"
 
+[group("hestia")]
 hestia-set-volume-step:
     #!/usr/bin/bash
     gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
+[group("hestia")]
 hestia-setup-app-folders:
     #!/usr/bin/bash
     dconf reset -f "/org/gnome/desktop/app-folders/"
