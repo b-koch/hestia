@@ -12,11 +12,11 @@ EXTENSIONS=(
     "9308:bluetooth-battery-monitor@v8v88v8v88.com"
     "8834:copyous@boerdereinar.dev"
     "5410:grand-theft-focus@zalckos.github.com"
-    "4099:no-overwiew@fthx"
+    "4099:no-overview@fthx"
     "4691:pip-on-top@rafostar.github.com"
     "7048:rounded-window-corners@fxgn"
     "355:status-area-horizontal-spacing@mathematical.coffee.gmail.com"
-    "5470:weatheroclock@CleaMenezesJr.github.io"
+    "5470:weatheroclock@CleoMenezesJr.github.io"
 )
 
 mkdir -p "$TARGET_DIR"

@@ -11,7 +11,7 @@ hestia-set-workspace-shortcuts:
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Shift><Super>Left', '<Shift><Super>less']"
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Shift><Super>Right', '<Shift><Super>y']"
 
-hestia-set-volume-step
+hestia-set-volume-step:
     #!/usr/bin/bash
     gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
