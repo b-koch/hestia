@@ -1,11 +1,13 @@
+# vim: set ft=make :
+
 [group("hestia")]
-hestia-disable-suspend:
+hestia-disable-suspend ACTION="":
     #!/usr/bin/bash
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
     gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'blank'
 
 [group("hestia")]
-hestia-set-workspace-shortcuts:
+hestia-set-workspace-shortcuts ACTION="":
     #!/usr/bin/bash
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Left', '<Super>less']"
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Right', '<Super>y']"
@@ -13,12 +15,12 @@ hestia-set-workspace-shortcuts:
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Shift><Super>Right', '<Shift><Super>y']"
 
 [group("hestia")]
-hestia-set-volume-step:
+hestia-set-volume-step ACTION="":
     #!/usr/bin/bash
     gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
 [group("hestia")]
-hestia-setup-app-folders:
+hestia-setup-app-folders ACTION="":
     #!/usr/bin/bash
     dconf reset -f "/org/gnome/desktop/app-folders/"
     gsettings set org.gnome.desktop.app-folders folder-children "['Office', 'Graphics', 'Development', 'Audio&Video', 'Games', 'Education', 'Network', 'Science', 'Settings', 'System', 'Utilities', 'GamingUtilities', 'Containers', 'Misc', 'Wine', 'YaST', 'Pardus']"
