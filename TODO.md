@@ -1,6 +1,7 @@
 # Hestia TODOs
 
 * Check additions (packages/rpms) for updates daily and trigger a build in case they have updates.
+* Partially move remnant cleanup to individual package removal. (/scripts/cleanup.sh)
 * Make sure systemd-sysext is enabled by default!
 * Figure out how to use sysext and if it's even good for my needs.
 * Move package installs to sysext builds! (Inspiration: [fedora-sysexts](https://github.com/fedora-sysexts/community))

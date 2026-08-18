@@ -22,9 +22,9 @@ EXTENSIONS=(
 
 mkdir -p "$TARGET_DIR"
 
-for entry in "${EXTENSIONS[@]}"; do
-    PK="${entry%%:*}"
-    UUID="${entry#*:}"
+for extension in "${EXTENSIONS[@]}"; do
+    PK="${extension%%:*}"
+    UUID="${extension#*:}"
 
     EXT_OUT="${TARGET_DIR}/${UUID}"
     VERSION_FILE="${EXT_OUT}/.version"
