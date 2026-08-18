@@ -44,6 +44,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Use the update-extensions commit SHA if available, falling back to the default SHA so subsequent steps checkout the latest files.
           ref: ${{ needs.update-extensions.outputs.commit_hash || github.sha }}
 
       - name: Maximize build space

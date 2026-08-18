@@ -13,6 +13,7 @@ jobs:
     permissions:
       contents: write
     outputs:
+      # Expose the auto-commit SHA so downstream jobs check out the freshly updated extensions.
       commit_hash: ${{ steps.auto-commit.outputs.commit_hash }}
 
     steps:
