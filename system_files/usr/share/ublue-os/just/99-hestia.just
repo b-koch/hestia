@@ -1,12 +1,15 @@
 # vim: set ft=make :
 
 [group("hestia")]
+# Prevent automatic suspend/sleep/hibernate.
 hestia-disable-suspend ACTION="":
     #!/usr/bin/bash
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
-    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'blank'
+    gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
+    gsettings set org.gnome.desktop.session idle-delay 0
 
 [group("hestia")]
+# Add switch/move-to workspace shortcuts (meta and shift+meta for "<" and "y").
 hestia-set-workspace-shortcuts ACTION="":
     #!/usr/bin/bash
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Left', '<Super>less']"
@@ -15,11 +18,13 @@ hestia-set-workspace-shortcuts ACTION="":
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Shift><Super>Right', '<Shift><Super>y']"
 
 [group("hestia")]
+# Set volume step to 2.
 hestia-set-volume-step ACTION="":
     #!/usr/bin/bash
     gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step 2
 
 [group("hestia")]
+# Create GNOME overview categories.
 hestia-setup-app-folders ACTION="":
     #!/usr/bin/bash
     dconf reset -f "/org/gnome/desktop/app-folders/"

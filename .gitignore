@@ -1,4 +1,6 @@
 cosign.key
+README.md
+TODO.md
 _build_*
 _build-*/**
 *_chunkah_*
