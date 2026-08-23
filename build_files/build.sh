@@ -47,3 +47,6 @@ echo "Building initramfs..."
 
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
+
+echo "Modifying kargs..."
+/ctx/scripts/modify_kargs.sh
