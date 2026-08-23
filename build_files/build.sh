@@ -42,9 +42,6 @@ echo "Applying configurations..."
 echo "Adding Hestia branding..."
 /ctx/scripts/hestia_branding.sh
 
-echo "Modifying kargs..."
-/ctx/scripts/modify_kargs.sh
-
 echo "Building initramfs..."
 /ctx/scripts/build-initramfs.sh
 
