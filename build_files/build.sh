@@ -22,9 +22,6 @@ echo "Installing flatpaks..."
 echo "Installing fonts..."
 /ctx/scripts/install_fonts.sh
 
-echo "Installing openrazer-daemon..."
-/ctx/scripts/install_openrazer_daemon.sh
-
 echo "Disabling repositories..."
 /ctx/scripts/disable_repos.sh
 
