@@ -22,6 +22,9 @@ echo "Installing flatpaks..."
 echo "Installing fonts..."
 /ctx/scripts/install_fonts.sh
 
+echo "Installing openrazer-daemon..."
+/ctx/scripts/install_openrazer_daemon.sh
+
 echo "Disabling repositories..."
 /ctx/scripts/disable_repos.sh
 
@@ -29,7 +32,7 @@ echo "Fixing Softmaker Office NX icons..."
 /ctx/scripts/fix_softmaker_icons.sh
 
 echo "Updating ujust imports..."
-/ctx/scripts/update-ujust-imports.sh
+/ctx/scripts/update_ujust_imports.sh
 
 echo "Applying configurations..."
 /ctx/scripts/remove_gnome_extensions.sh
