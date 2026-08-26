@@ -24,3 +24,5 @@ for repo in /ctx/repos/*.repo; do
         fi
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
+
+dnf5 copr enable deltacopy/darkly

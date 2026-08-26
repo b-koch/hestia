@@ -1,5 +1,6 @@
 # Hestia TODOs
 
+* Add proper copr installation logic
 * Check additions (packages/rpms) for updates daily and trigger a build in case they have updates.
 * Partially move remnant cleanup to individual package removal. (/scripts/cleanup.sh)
 * Make sure systemd-sysext is enabled by default!
