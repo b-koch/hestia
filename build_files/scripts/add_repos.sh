@@ -25,5 +25,6 @@ for repo in /ctx/repos/*.repo; do
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
 
-dnf5 copr enable deltacopy/darkly
-dnf5 copr enable matinlotfali/KDE-Rounded-Corners
+
+dnf copr enable deltacopy/darkly
+dnf copr enable matinlotfali/KDE-Rounded-Corners 
