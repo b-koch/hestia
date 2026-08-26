@@ -145,28 +145,28 @@ cat > /usr/share/ublue-os/bazzite/fastfetch.jsonc <<'HESTIA_FASTFETCH_EOF'
 }
 HESTIA_FASTFETCH_EOF
 
-echo "Checking whether a genuine Fedora default wallpaper is available..."
-FEDORA_VERSION="$(rpm -E %fedora)"
-BAZZITE_BG_OVERRIDE="/usr/share/glib-2.0/schemas/zz0-04-bazzite-desktop-silverblue-theme.gschema.override"
-if dnf5 install -y "f${FEDORA_VERSION}-backgrounds-gnome" 2>/dev/null; then
-    FEDORA_BG_XML="$(find /usr/share/gnome-background-properties -maxdepth 1 -iname "f${FEDORA_VERSION}*.xml" 2>/dev/null | head -n1)"
-    if [[ -n "$FEDORA_BG_XML" ]]; then
-        FEDORA_BG_LIGHT="$(grep -oP '(?<=<filename>).*?(?=</filename>)' "$FEDORA_BG_XML" | head -n1)"
-        FEDORA_BG_DARK="$(grep -oP '(?<=<filename-dark>).*?(?=</filename-dark>)' "$FEDORA_BG_XML" | head -n1)"
-        [[ -z "$FEDORA_BG_DARK" ]] && FEDORA_BG_DARK="$FEDORA_BG_LIGHT"
-        if [[ -n "$FEDORA_BG_LIGHT" ]]; then
-            echo "Found $FEDORA_BG_XML -> switching default wallpaper to $FEDORA_BG_LIGHT"
-            sed -i \
-              -e "s|picture-uri='file:///usr/share/backgrounds/convergence-dynamic.xml'|picture-uri='file://${FEDORA_BG_LIGHT}'|" \
-              -e "s|picture-uri-dark='file:///usr/share/backgrounds/convergence-dynamic.xml'|picture-uri-dark='file://${FEDORA_BG_DARK}'|" \
-              "$BAZZITE_BG_OVERRIDE"
-            glib-compile-schemas /usr/share/glib-2.0/schemas
-        else
-            echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome installed but no <filename> found in $FEDORA_BG_XML; leaving Bazzite wallpaper as default."
-        fi
-    else
-        echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome installed but no matching gnome-background-properties XML found; leaving Bazzite wallpaper as default."
-    fi
-else
-    echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome is not available; leaving Bazzite's wallpaper as the default for now. Nothing was broken - install it manually later if you want to switch."
-fi
+# echo "Checking whether a genuine Fedora default wallpaper is available..."
+# FEDORA_VERSION="$(rpm -E %fedora)"
+# BAZZITE_BG_OVERRIDE="/usr/share/glib-2.0/schemas/zz0-04-bazzite-desktop-silverblue-theme.gschema.override"
+# if dnf5 install -y "f${FEDORA_VERSION}-backgrounds-gnome" 2>/dev/null; then
+#     FEDORA_BG_XML="$(find /usr/share/gnome-background-properties -maxdepth 1 -iname "f${FEDORA_VERSION}*.xml" 2>/dev/null | head -n1)"
+#     if [[ -n "$FEDORA_BG_XML" ]]; then
+#         FEDORA_BG_LIGHT="$(grep -oP '(?<=<filename>).*?(?=</filename>)' "$FEDORA_BG_XML" | head -n1)"
+#         FEDORA_BG_DARK="$(grep -oP '(?<=<filename-dark>).*?(?=</filename-dark>)' "$FEDORA_BG_XML" | head -n1)"
+#         [[ -z "$FEDORA_BG_DARK" ]] && FEDORA_BG_DARK="$FEDORA_BG_LIGHT"
+#         if [[ -n "$FEDORA_BG_LIGHT" ]]; then
+#             echo "Found $FEDORA_BG_XML -> switching default wallpaper to $FEDORA_BG_LIGHT"
+#             sed -i \
+#               -e "s|picture-uri='file:///usr/share/backgrounds/convergence-dynamic.xml'|picture-uri='file://${FEDORA_BG_LIGHT}'|" \
+#               -e "s|picture-uri-dark='file:///usr/share/backgrounds/convergence-dynamic.xml'|picture-uri-dark='file://${FEDORA_BG_DARK}'|" \
+#               "$BAZZITE_BG_OVERRIDE"
+#             glib-compile-schemas /usr/share/glib-2.0/schemas
+#         else
+#             echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome installed but no <filename> found in $FEDORA_BG_XML; leaving Bazzite wallpaper as default."
+#         fi
+#     else
+#         echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome installed but no matching gnome-background-properties XML found; leaving Bazzite wallpaper as default."
+#     fi
+# else
+#     echo "WARNING: f${FEDORA_VERSION}-backgrounds-gnome is not available; leaving Bazzite's wallpaper as the default for now. Nothing was broken - install it manually later if you want to switch."
+# fi

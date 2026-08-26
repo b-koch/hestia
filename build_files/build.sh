@@ -32,8 +32,8 @@ echo "Updating ujust imports..."
 /ctx/scripts/update_ujust_imports.sh
 
 echo "Applying configurations..."
-/ctx/scripts/remove_gnome_extensions.sh
-/ctx/scripts/configure_gnome_extensions.sh
+# /ctx/scripts/remove_gnome_extensions.sh
+# /ctx/scripts/configure_gnome_extensions.sh
 /ctx/scripts/configure.sh # should be the last configuration script to be run
 
 #echo "Enabling Hestia sysext auto-update..."
