@@ -26,5 +26,6 @@ for repo in /ctx/repos/*.repo; do
 done
 
 
-dnf copr enable deltacopy/darkly
-dnf copr enable matinlotfali/KDE-Rounded-Corners 
+echo "Enabling COPRs..."
+dnf copr enable -y deltacopy/darkly
+dnf copr enable -y matinlotfali/KDE-Rounded-Corners 
