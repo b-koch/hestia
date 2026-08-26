@@ -26,3 +26,4 @@ for repo in /ctx/repos/*.repo; do
 done
 
 dnf5 copr enable deltacopy/darkly
+dnf5 copr enable matinlotfali/KDE-Rounded-Corners
