@@ -31,6 +31,9 @@ echo "Fixing Softmaker Office NX icons..."
 echo "Updating ujust imports..."
 /ctx/scripts/update_ujust_imports.sh
 
+echo "Adding Bitwarden Policy to Polkit"
+/ctx/scripts/add_bitwarden_polkit_policy.sh
+
 echo "Applying configurations..."
 # /ctx/scripts/remove_gnome_extensions.sh
 # /ctx/scripts/configure_gnome_extensions.sh
