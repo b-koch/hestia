@@ -1,8 +1,7 @@
 # Hestia TODOs
 
-* Mount / as Hestia (display name)
+* Add Global Themes (KDE Plasma) for darkly/lightly to image (~/.local/share/plasma/look-and-feel)
 * Add proper copr installation logic
-* Add/Fix Merkuro
 * Rip out GNOME remnants
 * Plasma Default settings
     * Caps Lock -> 3rd level chooser & Ctrl + Caps Lock -> default Caps Lock behavior
