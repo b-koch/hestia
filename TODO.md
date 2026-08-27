@@ -1,5 +1,6 @@
 # Hestia TODOs
 
+* Mount / as Hestia (display name)
 * Add proper copr installation logic
 * Add/Fix Merkuro
 * Rip out GNOME remnants
