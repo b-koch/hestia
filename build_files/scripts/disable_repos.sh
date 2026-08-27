@@ -11,3 +11,7 @@ for repo in /ctx/repos/*.repo; do
         sed -i 's/^enabled=1/enabled=0/' "$target"
     fi
 done
+
+echo "Enabling COPRs..."
+dnf copr disable -y deltacopy/darkly
+dnf copr disable -y matinlotfali/KDE-Rounded-Corners
