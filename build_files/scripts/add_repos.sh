@@ -29,3 +29,4 @@ done
 echo "Enabling COPRs..."
 dnf copr enable -y deltacopy/darkly
 dnf copr enable -y matinlotfali/KDE-Rounded-Corners
+dnf copr enable -y cboxdoerfer/fsearch 
