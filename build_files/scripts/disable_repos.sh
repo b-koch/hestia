@@ -12,6 +12,7 @@ for repo in /ctx/repos/*.repo; do
     fi
 done
 
-echo "Enabling COPRs..."
+echo "Disabling COPRs..."
 dnf copr disable -y deltacopy/darkly
 dnf copr disable -y matinlotfali/KDE-Rounded-Corners
+dnf copr disable -y cboxdoerfer/fsearch 
