@@ -1,5 +1,6 @@
 # Hestia TODOs
 
+* Add volt-gui
 * Add Global Themes (KDE Plasma) for darkly/lightly to image (~/.local/share/plasma/look-and-feel)
 * Add proper copr installation logic
 * Rip out GNOME remnants
