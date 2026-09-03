@@ -19,6 +19,9 @@ echo "Installing external rpms..."
 echo "Installing flatpaks..."
 /ctx/scripts/install_flatpaks.sh
 
+echo "Installing custom external applications..."
+/ctx/scripts/install_custom.sh
+
 echo "Installing fonts..."
 /ctx/scripts/install_fonts.sh
 
