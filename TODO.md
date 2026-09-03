@@ -1,9 +1,7 @@
 # Hestia TODOs
 
-* Add volt-gui
 * Add Global Themes (KDE Plasma) for darkly/lightly to image (~/.local/share/plasma/look-and-feel)
 * Add proper copr installation logic
-* Add proper custom install logic (e.g. via make files) for external packages
 * Rip out GNOME remnants
 * Plasma Default settings
     * Caps Lock -> 3rd level chooser & Ctrl + Caps Lock -> default Caps Lock behavior
