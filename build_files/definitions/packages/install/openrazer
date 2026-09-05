@@ -1,2 +1,1 @@
-# Disabled because of issues with DKMS.
-#openrazer-daemon
+openrazer-daemon
