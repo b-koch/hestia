@@ -22,14 +22,8 @@ echo "Installing flatpaks..."
 echo "Installing custom external applications..."
 /ctx/scripts/install_custom.sh
 
-echo "Installing fonts..."
-/ctx/scripts/install_fonts.sh
-
 echo "Disabling repositories..."
 /ctx/scripts/disable_repos.sh
-
-echo "Fixing Softmaker Office NX icons..."
-/ctx/scripts/fix_softmaker_icons.sh
 
 echo "Updating ujust imports..."
 /ctx/scripts/update_ujust_imports.sh
@@ -38,8 +32,6 @@ echo "Adding Bitwarden Policy to Polkit"
 /ctx/scripts/add_bitwarden_polkit_policy.sh
 
 echo "Applying configurations..."
-# /ctx/scripts/remove_gnome_extensions.sh
-# /ctx/scripts/configure_gnome_extensions.sh
 /ctx/scripts/configure.sh # should be the last configuration script to be run
 
 #echo "Enabling Hestia sysext auto-update..."

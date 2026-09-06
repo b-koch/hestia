@@ -5,8 +5,7 @@ source /ctx/lib/read_list.sh
 FLATPAK_DIR="/ctx/definitions/flatpaks/install"
 OVERRIDE_DIR="/ctx/definitions/flatpaks/overrides"
 
-SCRIPT="/usr/libexec/hestia/install-flatpaks"
-SERVICE="/usr/lib/systemd/system/hestia-flatpaks.service"
+SCRIPT="/usr/libexec/hestia/install-flatpaks.sh"
 
 mkdir -p /usr/libexec/hestia
 mkdir -p /var/lib/hestia
@@ -24,20 +23,11 @@ if [[ -d "$FLATPAK_DIR" ]]; then
     done
 fi
 
-echo "Generating Flatpak first-boot installer..."
+echo "Generating Hestia Flatpak installer..."
 
 cat > "$SCRIPT" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-
-MARKER="/var/lib/hestia/flatpaks-installed"
-
-mkdir -p "$(dirname "$MARKER")"
-
-
-if [[ -f "$MARKER" ]]; then
-    exit 0
-fi
 
 flatpak remote-add \
     --if-not-exists \
@@ -67,29 +57,6 @@ if [[ -d "$OVERRIDE_DIR" ]]; then
     done
 fi
 
-cat >> "$SCRIPT" <<'EOF'
-
-mkdir -p /var/lib/hestia
-touch "$MARKER"
-EOF
-
 chmod +x "$SCRIPT"
 
-cat > "$SERVICE" <<EOF
-[Unit]
-Description=Install Hestia Flatpaks
-After=network-online.target flatpak-system-helper.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=$SCRIPT
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl enable hestia-flatpaks.service
-
-echo "Flatpak first-boot installer created."
+echo "Flatpak installer created."
