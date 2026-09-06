@@ -14,7 +14,6 @@ hestia-install-flatpaks ACTION="":
     #!/usr/bin/bash
     /usr/libexec/hestia/install-flatpaks.sh
 
-
 # Fetch steam art for non-steam games.
 [group("hestia")]
 hestia-install-flatpaks ACTION="":
