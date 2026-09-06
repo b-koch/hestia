@@ -1,2 +1,0 @@
-# Disabled for now
-#%wheel ALL=(root) NOPASSWD: /usr/libexec/hestia-sysext-fetch.sh
