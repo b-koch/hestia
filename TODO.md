@@ -6,6 +6,7 @@
 * Plasma Default settings
     * Caps Lock -> 3rd level chooser & Ctrl + Caps Lock -> default Caps Lock behavior
 * Add Darkly GTK theme
+* Add Darkly flatpak theme?!
 * Add Fedora bold font fix: echo 'QT_NO_SYNTHESIZED_BOLD=1' | sudo tee -a /etc/environment.d/QT_NO_SYNTHESIZED_BOLD.conf
 * Add additional widgets
 * Check additions (packages/rpms) for updates daily and trigger a build in case they have updates.
