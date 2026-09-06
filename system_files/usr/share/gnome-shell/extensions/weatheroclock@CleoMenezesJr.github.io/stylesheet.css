@@ -1,0 +1,16 @@
+.weather_label {
+  margin-left: 0.3em;
+}
+
+.weather-after-clock {
+  margin-left: 0.7em;
+}
+
+.weather-before-clock {
+  margin-right: 0.7em;
+}
+
+.custom-weather-icon-spacing {
+  padding: 0;
+  margin: 0;
+}
