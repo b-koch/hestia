@@ -16,12 +16,12 @@ hestia-install-flatpaks ACTION="":
 
 # Fetch steam art for non-steam games.
 [group("hestia")]
-hestia-install-flatpaks ACTION="":
+hestia-fetch-steam-art ACTION="":
     #!/usr/bin/bash
     /usr/libexec/hestia/steam-art-fetch.py
 
 # Remove orphaned steam/proton prefixes.
 [group("hestia")]
-hestia-install-flatpaks ACTION="":
+hestia-remove-orphaned-prefixes ACTION="":
     #!/usr/bin/bash
     /usr/libexec/hestia/steam-remove-orphaned-prefixes.sh
