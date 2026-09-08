@@ -1,29 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:best-practices",
+    "config:best-practices"
   ],
 
-  "rebaseWhen": "never",
+  "platformAutomerge": true,
+  "rebaseWhen": "behind-base-branch",
 
   "packageRules": [
     {
-      "automerge": true,
-      "matchUpdateTypes": ["pin", "pinDigest"]
+      "matchUpdateTypes": ["pin", "pinDigest"],
+      "automerge": true
     },
     {
-      "enabled": false,
       "matchUpdateTypes": ["digest", "pinDigest", "pin"],
       "matchDepTypes": ["container"],
       "matchFileNames": [".github/workflows/**.yaml", ".github/workflows/**.yml"],
+      "enabled": false
     },
     {
       "description": "Auto-merge base image digest bumps to trigger a rebuild",
       "matchFileNames": ["Containerfile"],
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["digest"],
-      "automerge": true,
-      "platformAutomerge": true
-    },
+      "automerge": true
+    }
   ]
 }
