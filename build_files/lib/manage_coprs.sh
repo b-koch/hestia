@@ -7,8 +7,6 @@ COPRS_FILE="${COPRS_DIR}/coprs.list"
 manage_coprs() {
     local action="$1"   # "enable" or "disable"
 
-    echo "${verb} COPRs..."
-
     if [[ ! -f "$COPRS_FILE" ]]; then
         echo "Copr list not found:"
         echo "  $COPRS_FILE"
