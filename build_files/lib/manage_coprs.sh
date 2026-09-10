@@ -6,7 +6,7 @@ COPRS_DIR="/ctx/repos/"
 COPRS_FILE="${COPRS_DIR}/coprs.list"
 
 _manage_coprs() {
-    local action="$1"   # "enable" or "disable"
+    local action="$1"
 
     if [[ ! -f "$COPRS_FILE" ]]; then
         echo "Copr list not found:"
