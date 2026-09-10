@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "Installing AdwaitaMono..."
+
 TARGET_DIR="/usr/share/fonts/AdwaitaMono"
 
 latest_url=$(curl -fsSL -o /dev/null -w "%{url_effective}" https://github.com/ryanoasis/nerd-fonts/releases/latest)
@@ -20,4 +22,4 @@ unzip -o "$tmp_zip" -d "$TARGET_DIR"
 echo "Updating system font cache..."
 fc-cache -f "$TARGET_DIR"
 
-echo "AdwaitaMono installed successfully to ${TARGET_DIR}."
+echo "AdwaitaMono installed successfully."

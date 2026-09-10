@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "Building volt-gui..."
+
 echo "Ensuring runtime dependencies are installed..."
 if command -v dnf &>/dev/null; then
     echo "Installing runtime dependencies (python3-pyside6, libxcb)..."
@@ -24,4 +26,4 @@ echo "Installing volt-gui system-wide..."
 cd "$tmp_dir"
 make install
 
-echo "volt-gui ${tag} installed successfully."
+echo "Volt-gui ${tag} installed successfully."
