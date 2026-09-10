@@ -10,9 +10,6 @@ log "Starting system cleanup"
 log "Deleting broken icon symlinks"
 find /usr/share/icons -xtype l -delete
 
-# Remove autostart files
-# Example: rm /etc/skel/.config/autostart/steam.desktop
-
 log "Removing remnants"
 REMNANTS=(
   "/usr/share/applications/Waydroid"

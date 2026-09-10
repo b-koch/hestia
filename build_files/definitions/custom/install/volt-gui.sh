@@ -10,7 +10,7 @@ fi
 echo "Getting latest release tag from GitHub..."
 latest_url=$(curl -fsSL -o /dev/null -w "%{url_effective}" https://github.com/pythonlover02/volt-gui/releases/latest)
 tag="${latest_url##*/}"
-version="${tag#v}" # Strips the leading 'v' if tag is formatted like 'v2.1.1'
+version="${tag#v}"
 
 download_url="https://github.com/pythonlover02/volt-gui/releases/download/${tag}/volt-gui-${version}.tar.gz"
 

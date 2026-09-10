@@ -34,9 +34,6 @@ echo "Adding Bitwarden Policy to Polkit"
 echo "Applying configurations..."
 /ctx/scripts/configure.sh # should be the last configuration script to be run
 
-#echo "Enabling Hestia sysext auto-update..."
-#/ctx/scripts/enable_hestia_sysext.sh
-
 echo "Adding Hestia branding..."
 /ctx/scripts/hestia_branding.sh
 

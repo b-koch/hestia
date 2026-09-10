@@ -5,7 +5,6 @@ RPMS_INSTALL_DIR="/ctx/definitions/rpms/install"
 
 urls=()
 
-# Handle empty matches cleanly without throwing errors
 shopt -s nullglob
 
 if [ -d "$RPMS_INSTALL_DIR" ]; then

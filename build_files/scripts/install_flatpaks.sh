@@ -12,7 +12,7 @@ mkdir -p /var/lib/hestia
 
 APPS=()
 
-# Read Flatpak install lists
+# Read Flatpak install lists.
 if [[ -d "$FLATPAK_DIR" ]]; then
     for list in "$FLATPAK_DIR"/*; do
         [[ -f "$list" ]] || continue
@@ -35,12 +35,12 @@ flatpak remote-add \
     https://dl.flathub.org/repo/flathub.flatpakrepo
 EOF
 
-# Install Flatpaks
+# Install Flatpaks.
 for app in "${APPS[@]}"; do
     printf 'flatpak install --system --noninteractive --assumeyes flathub %q\n' "$app" >> "$SCRIPT"
 done
 
-# Apply overrides
+# Apply overrides.
 if [[ -d "$OVERRIDE_DIR" ]]; then
     for file in "$OVERRIDE_DIR"/*; do
         [[ -f "$file" ]] || continue
