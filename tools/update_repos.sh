@@ -1,6 +1,7 @@
 # This file is supposed to be run manually to update the .repo (dnf) files in this git-repository.
 #!/usr/bin/env bash
 set -euo pipefail
+source ../build_files/lib/read_list.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${SCRIPT_DIR}/../build_files/repos"
@@ -20,10 +21,6 @@ if [[ ! -f "$SOURCE_FILE" ]]; then
 fi
 
 while IFS='|' read -r filename url; do
-    # Skip comments and blank lines
-    [[ -z "${filename// }" ]] && continue
-    [[ "$filename" =~ ^# ]] && continue
-
     echo "Updating $filename..."
 
     tmp="$(mktemp)"
@@ -40,8 +37,7 @@ while IFS='|' read -r filename url; do
         rm -f "$tmp"
         echo "  ✗ Failed"
     fi
-done < "$SOURCE_FILE"
-
+done < <(read_list "$SOURCE_FILE")
 
 echo
 echo "Repository update complete."
