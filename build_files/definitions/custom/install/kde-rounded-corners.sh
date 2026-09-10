@@ -9,7 +9,7 @@ BEFORE_FILE=$(mktemp)
 rpm -qa --qf '%{NAME}\n' | sort -u > "$BEFORE_FILE"
 
 echo "Installing build dependencies..."
-sudo dnf install -y $PACKAGES
+dnf install -y $PACKAGES
 
 AFTER_FILE=$(mktemp)
 rpm -qa --qf '%{NAME}\n' | sort -u > "$AFTER_FILE"
@@ -24,11 +24,11 @@ mkdir build
 cd build
 cmake ..
 cmake --build . -j
-sudo make install
+make install
 
 if [ -n "$NEW_PACKAGES" ]; then
     echo "Removing newly installed build dependencies..."
-    echo "$NEW_PACKAGES" | xargs sudo dnf remove -y
+    echo "$NEW_PACKAGES" | xargs dnf remove -y
 else
     echo "No new packages were installed; skipping cleanup."
 fi
