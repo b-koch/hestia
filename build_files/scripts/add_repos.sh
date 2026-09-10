@@ -26,4 +26,4 @@ for repo in /ctx/repos/*.repo; do
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
 
-manage_coprs enable
+enable_coprs

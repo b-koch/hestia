@@ -13,4 +13,4 @@ for repo in /ctx/repos/*.repo; do
     fi
 done
 
-manage_coprs disable
+disable_coprs

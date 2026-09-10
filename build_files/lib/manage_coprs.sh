@@ -4,7 +4,7 @@ set -euo pipefail
 COPRS_DIR="/ctx/repos/"
 COPRS_FILE="${COPRS_DIR}/coprs.list"
 
-manage_coprs() {
+_manage_coprs() {
     local action="$1"   # "enable" or "disable"
 
     if [[ ! -f "$COPRS_FILE" ]]; then
@@ -13,11 +13,15 @@ manage_coprs() {
         exit 1
     fi
 
-    while IFS='|' read -r name copr; do
-        # Skip comments and blank lines
-        [[ -z "${name// }" ]] && continue
-        [[ "$name" =~ ^# ]] && continue
-
+    while IFS='|' read -r _ copr; do
         dnf copr "$action" -y "$copr"
-    done < "$COPRS_FILE"
+    done < <(read_list "$COPRS_FILE")
+}
+
+enable_coprs() {
+    _manage_coprs enable
+}
+
+disable_coprs() {
+    _manage_coprs disable
 }

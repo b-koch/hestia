@@ -10,6 +10,7 @@ read_list() {
 		# Remove trailing whitespace
 		line="${line%"${line##*[![:space:]]}"}"
 
+		[[ -z "${line// }" ]] && continue
 		[[ -z "$line" ]] && continue
 		[[ "$line" =~ ^# ]] && continue
 
