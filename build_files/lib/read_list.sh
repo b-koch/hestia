@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 read_list() {
     local file="${1:-/dev/stdin}"

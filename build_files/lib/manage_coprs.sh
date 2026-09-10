@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source /ctx/lib/read_list.sh
 
 COPRS_DIR="/ctx/repos/"
 COPRS_FILE="${COPRS_DIR}/coprs.list"
