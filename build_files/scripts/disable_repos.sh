@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source /ctx/lib/manage_coprs.sh
 
 for repo in /ctx/repos/*.repo; do
     [ -e "$repo" ] || continue
@@ -12,7 +13,4 @@ for repo in /ctx/repos/*.repo; do
     fi
 done
 
-echo "Disabling COPRs..."
-dnf copr disable -y deltacopy/darkly
-dnf copr disable -y matinlotfali/KDE-Rounded-Corners
-dnf copr disable -y cboxdoerfer/fsearch 
+manage_coprs disable

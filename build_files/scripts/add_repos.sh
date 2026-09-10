@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source /ctx/lib/manage_coprs.sh
 
 mkdir -p /etc/yum.repos.d
 
@@ -25,8 +26,4 @@ for repo in /ctx/repos/*.repo; do
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
 
-
-echo "Enabling COPRs..."
-dnf copr enable -y deltacopy/darkly
-dnf copr enable -y matinlotfali/KDE-Rounded-Corners
-dnf copr enable -y cboxdoerfer/fsearch 
+manage_coprs enable
