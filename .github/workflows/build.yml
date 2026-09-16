@@ -14,6 +14,7 @@ on:
       - '**/TODO.md'
       - 'tools/**'
       - 'sysext/**'
+      - '.github/workflows/update-gnome-extensions.yml'
   workflow_dispatch:
 
 env:
@@ -24,8 +25,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  update-extensions:
+    uses: ./.github/workflows/update-gnome-extensions.yml
+    permissions:
+      contents: write
+
   build_push:
     name: Build and push image
+    needs: update-extensions
     runs-on: ubuntu-24.04
 
     permissions:
@@ -36,6 +43,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Use the update-extensions commit SHA if available, falling back to the default SHA so subsequent steps checkout the latest files.
+          ref: ${{ needs.update-extensions.outputs.commit_hash || github.sha }}
 
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
