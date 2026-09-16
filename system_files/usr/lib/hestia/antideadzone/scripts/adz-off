@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+pkill -9 -f "python3 /usr/lib/hestia/antideadzone/antideadzone.py"
+
+exec "$@"

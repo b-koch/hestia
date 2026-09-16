@@ -1,1 +1,0 @@
-/var/mnt/vault/Projects/hestia/system_files/var/usrlocal/libexec/RazerBatteryTray/razer_viper_v3_pro_battery_tray.sh

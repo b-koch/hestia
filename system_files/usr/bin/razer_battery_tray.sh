@@ -1,0 +1,1 @@
+/var/mnt/vault/Projects/hestia/system_files/usr/lib/hestia/RazerBatteryTray/razer_battery_tray.sh

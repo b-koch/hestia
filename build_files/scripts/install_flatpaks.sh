@@ -5,7 +5,7 @@ source /ctx/lib/read_list.sh
 FLATPAK_DIR="/ctx/definitions/flatpaks/install"
 OVERRIDE_DIR="/ctx/definitions/flatpaks/overrides"
 
-SCRIPT="/usr/local/libexec/hestia/install-flatpaks.sh"
+SCRIPT="/usr/lib/hestia/install-flatpaks.sh"
 
 mkdir -p /usr/libexec/hestia
 mkdir -p /var/lib/hestia

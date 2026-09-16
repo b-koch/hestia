@@ -21,4 +21,4 @@ cd "$BASE_DIR/src"
 nohup python3 ./razer_battery_tray.py "Razer Viper V3 Pro" &
 
 sleep 2
-/usr/local/bin/hestia-reload-appindicator.sh
+/usr/bin/reload-appindicator.sh
