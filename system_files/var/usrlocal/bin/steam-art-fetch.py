@@ -1,0 +1,1 @@
+/var/mnt/vault/Projects/hestia/system_files/var/usrlocal/libexec/hestia/steam-art-fetch.py

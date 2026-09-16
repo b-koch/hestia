@@ -1,1 +1,0 @@
-/var/mnt/vault/Projects/hestia/system_files/usr/local/libexec/hestia/steam-remove-orphaned-prefixes.sh
