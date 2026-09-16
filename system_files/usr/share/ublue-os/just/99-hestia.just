@@ -67,16 +67,16 @@ hestia-setup-app-folders:
 [group("hestia")]
 hestia-install-flatpaks:
     #!/usr/bin/bash
-    /usr/libexec/hestia/install-flatpaks.sh
+    /usr/local/libexec/hestia/install-flatpaks.sh
 
 # Fetch steam art for non-steam games.
 [group("hestia")]
 hestia-fetch-steam-art:
     #!/usr/bin/bash
-    /usr/libexec/hestia/steam-art-fetch.py
+    /usr/local/libexec/hestia/steam-art-fetch.py
 
 # Remove orphaned steam/proton prefixes.
 [group("hestia")]
 hestia-remove-orphaned-prefixes:
     #!/usr/bin/bash
-    /usr/libexec/hestia/steam-remove-orphaned-prefixes.sh
+    /usr/local/libexec/hestia/steam-remove-orphaned-prefixes.sh

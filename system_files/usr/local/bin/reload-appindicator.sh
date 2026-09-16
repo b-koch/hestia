@@ -1,0 +1,1 @@
+/var/mnt/vault/Projects/hestia/system_files/usr/local/libexec/hestia/reload-appindicator.sh

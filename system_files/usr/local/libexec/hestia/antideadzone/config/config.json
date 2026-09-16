@@ -1,0 +1,144 @@
+{
+  "_comment": "Copy this to ~/.config/hestia-antideadzone/config.json and edit. JSON has no comments, so any '_xxx_help' key is documentation only and is ignored by the daemon.",
+  "device_name_match": "Generic X-Box pad",
+  "_device_name_match_help": "Case-insensitive substring to pick your pad if you have multiple input devices (e.g. 'Xbox', 'DualSense', '8BitDo'). Leave empty to auto-pick the first thing that looks like a gamepad. Run list-devices.py to see exact names.",
+  "active_profile": "hogwarts",
+  "profiles": {
+    "default": {
+      "deadzone_shape": "radial",
+      "left": {
+        "deadzone": 0.0,
+        "anti_deadzone": 0.0,
+        "curve": 1.0
+      },
+      "right": {
+        "deadzone": 0.0,
+        "anti_deadzone": 0.0,
+        "curve": 1.0
+      }
+    },
+    "off": {
+      "deadzone_shape": "radial",
+      "left": {
+        "deadzone": 0.0,
+        "anti_deadzone": 0.0,
+        "curve": 1.0
+      },
+      "right": {
+        "deadzone": 0.0,
+        "anti_deadzone": 0.0,
+        "curve": 1.0
+      }
+    },
+    "10": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.1
+      }
+    },
+    "15": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.15
+      }
+    },
+    "20": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.2
+      }
+    },
+    "23": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.23
+      }
+    },
+    "24": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.24
+      }
+    },
+    "25": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.25
+      }
+    },
+    "hogwarts": {
+      "deadzone_shape": "axial",
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.26,
+        "curve": 1.0
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.26,
+        "curve": 2.0
+      }
+    },
+    "26": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.26
+      }
+    },
+    "27": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.27
+      }
+    },
+    "30": {
+      "left": {
+        "deadzone": 0.03,
+        "anti_deadzone": 0.1
+      },
+      "right": {
+        "deadzone": 0.01,
+        "anti_deadzone": 0.3
+      }
+    }
+  },
+  "_profile_help": "deadzone: 0-1, fraction of stick travel ignored near center (raise if you have stick drift). anti_deadzone: 0-1, the output floor the instant the stick leaves the deadzone -- this is the setting that defeats a game's own internal deadzone, same concept as Steam Input's. curve: 1.0 = linear; >1.0 gives more fine control near center at the cost of feeling 'slower' to ramp up (try 1.5-2.0); <1.0 is the opposite (twitchier near center). deadzone_shape: 'radial' (recommended, circular, diagonals stay smooth) or 'axial' (per-axis independent, chamfers diagonals but matches some games' own logic).",
+  "rescan_interval": 1.0,
+  "_rescan_interval_help": "Seconds between reconnect attempts while no matching controller is found. Each attempt just opens the /dev/input/event* nodes and reads capabilities -- a few ms of local syscalls -- so 1s or even lower isn't a meaningful CPU cost.",
+  "reload_interval": 1.0,
+  "_reload_interval_help": "Seconds between checks of this file's last-modified time. Lower = more responsive profile switches, higher = very slightly less overhead. 1 second is already fast enough to switch mid-game between menu screens.",
+  "debug_sample_rate": 5,
+  "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables."
+}
