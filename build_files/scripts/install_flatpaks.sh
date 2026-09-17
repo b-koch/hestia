@@ -7,8 +7,7 @@ OVERRIDE_DIR="/ctx/definitions/flatpaks/overrides"
 
 SCRIPT="/usr/lib/hestia/install-flatpaks.sh"
 
-mkdir -p /usr/libexec/hestia
-mkdir -p /var/lib/hestia
+mkdir -p /usr/lib/hestia/
 
 APPS=()
 
@@ -28,6 +27,11 @@ echo "Generating Hestia Flatpak installer..."
 cat > "$SCRIPT" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+
+if [ "$EUID" -ne 0 ]; then
+  echo "[-] This script requires root privileges. Elevating..."
+  exec sudo "$0" "$@"
+fi
 
 flatpak remote-add \
     --if-not-exists \
