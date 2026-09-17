@@ -32,7 +32,7 @@ done
 log "Disabling StartupNotify for installed desktop entries"
 sed -i 's/StartupNotify=true/StartupNotify=false/g' /usr/share/applications/*.desktop
 
-remaining=$(grep -l 'StartupNotify=true' /usr/share/applications/*.desktop 2>/dev/null | wc -l)
+remaining=$(grep -l 'StartupNotify=true' /usr/share/applications/*.desktop 2>/dev/null | wc -l || true)
 log "Entries still enabling StartupNotify: ${remaining}"
 
 
