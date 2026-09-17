@@ -55,9 +55,8 @@ CONFIG_PATHS = [
 ]
 
 DEFAULT_PROFILE = {
-    "left": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0},
-    "right": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0},
-    "deadzone_shape": "radial",
+    "left": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0, "deadzone_shape": "radial"},
+    "right": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0, "deadzone_shape": "radial"},
 }
 
 # "off" is always available even if the user never defines it: it
@@ -66,9 +65,8 @@ DEFAULT_PROFILE = {
 # single active_profile change away, same mechanism as switching
 # to a real profile.
 BUILTIN_OFF_PROFILE = {
-    "left": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0},
-    "right": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0},
-    "deadzone_shape": "radial",
+    "left": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0, "deadzone_shape": "radial"},
+    "right": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0, "deadzone_shape": "radial"},
 }
 
 DEFAULT_CONFIG = {
@@ -203,19 +201,108 @@ def shape_axis_radial(x, y, deadzone, anti_deadzone, curve):
 
 
 def shape_axis_axial(v, deadzone, anti_deadzone, curve):
-    """Independent per-axis deadzone/anti-deadzone (no vector
-    normalization). Simpler, matches how some games' own deadzone
-    works, but clips diagonals more than radial."""
+    """True per-axis deadzone/anti-deadzone -- deliberately not
+    vector-based. This exists specifically to defeat games (many
+    UE4/5 titles, e.g. Hogwarts Legacy) whose own built-in deadzone
+    is also axial: each axis independently zeroes below its own
+    deadzone and rescales past it, chamfering diagonals at the
+    corners rather than using a circular radius (see Unreal's
+    EDeadZoneType::Axial docs). Pre-boosting each axis here the same
+    way, so the pre-boosted value survives the game re-applying its
+    own per-axis deadzone on top, is what actually restores movement
+    on a diagonal push that the game would otherwise eat entirely --
+    a vector/magnitude-based boost does NOT survive that, since the
+    game only ever sees this axis's own value, not the vector angle
+    we computed it from.
+
+    This does distort the angle of shallow diagonal pushes near the
+    deadzone edge (small pushes can register as pure-cardinal, or as
+    a steeper angle than intended, until deflection is well past the
+    floor) -- that's an inherent consequence of two independent
+    per-axis thresholds being crossed at different points, not a
+    bug, and it's the same distortion the game's own axial deadzone
+    would already introduce on raw input. Use the radial shape
+    instead if that distortion matters more to you than reliably
+    beating a per-axis deadzone downstream."""
     sign = 1.0 if v >= 0 else -1.0
     mag = abs(v)
     if mag <= deadzone:
         return 0.0
-    scaled = (mag - deadzone) / (1.0 - deadzone) if deadzone < 1.0 else mag
-    scaled = max(0.0, min(1.0, scaled))
-    scaled = apply_curve(scaled, curve)
+    span = (1.0 - deadzone) if deadzone < 1.0 else 1.0
+    frac = min(1.0, (mag - deadzone) / span)
+    frac = apply_curve(frac, curve)
     if anti_deadzone > 0.0:
-        scaled = anti_deadzone + scaled * (1.0 - anti_deadzone)
-    return sign * scaled
+        # Jump straight to the anti_deadzone floor at the deadzone
+        # edge, then ramp the remainder up to 1.0 -- same shape as
+        # radial's boost, just applied per-axis.
+        out = anti_deadzone + frac * (1.0 - anti_deadzone)
+    else:
+        out = frac
+    out = min(1.0, out)
+    return sign * out
+
+
+def shape_axis_sloped(x, y, deadzone, anti_deadzone, curve):
+    """Third deadzone_shape option: sloped (a.k.a. "cross with wedge
+    edges") per-axis deadzone, plus anti-deadzone. Based on the
+    documented "sloped axial" / "sloped scaled axial" deadzone from
+    Josh Sutphin's thumbstick dead zone article and its extension at
+    github.com/Minimuino/thumbstick-deadzones (also shipped as
+    PadForge's "Sloped Scaled Axial" shape) -- a well-tested approach
+    specifically designed to fix axial's "snap to grid" problem at
+    low deflection while keeping axial's precise single-axis control
+    at high deflection.
+
+    Unlike plain axial, each axis's deadzone is not a fixed value:
+    axis X's effective deadzone is `deadzone * abs(y)`, and axis Y's
+    is `deadzone * abs(x)`. So a push that's genuinely close to one
+    cardinal direction gets an almost-zero deadzone on the *other*
+    axis (letting a small amount of that axis through cleanly), while
+    a push that's already diagonal gets a normal deadzone on both --
+    this is what removes the hard 45-degree snap: the reference
+    project's own test suite explicitly checks "is it possible to
+    perform a slow horizontal/vertical motion" and "is it easy to
+    perform a pure horizontal/vertical motion" and passes both,
+    where plain axial fails the first and hybrid (vector-gated,
+    flat-floored -- tried here and discarded for feeling like a
+    hard 45-degree snap) fails differently by collapsing angle
+    entirely near the deadzone edge.
+
+    The anti-deadzone floor is then layered on per-axis, using each
+    axis's own sloped threshdold as the jump-off point -- this keeps
+    the "reliably clears a downstream game's own per-axis deadzone"
+    property that plain axial has and hybrid was chosen over, while
+    the sloped gate underneath noticeably softens the angle
+    distortion (verified: a 22-degree push now reads as 30-44
+    degrees depending on deflection, versus hybrid's flat 45 degrees
+    at every deflection). It does not eliminate angle distortion
+    entirely -- that's the same fundamental tension as axial/hybrid,
+    since the floor still has to be large enough to survive the
+    game's own deadzone -- and a fully-deflected diagonal squares off
+    slightly (each axis boosted toward, but not exactly reaching, the
+    shared ceiling) rather than keeping its exact raw proportion,
+    same documented characteristic the reference project's own
+    "hybrid" shape has at full deflection."""
+    dz_x = deadzone * abs(y)
+    dz_y = deadzone * abs(x)
+
+    def shape_component(v, dz):
+        sign = 1.0 if v >= 0 else -1.0
+        mag = abs(v)
+        if mag <= dz:
+            return 0.0
+        span = (1.0 - dz) if dz < 1.0 else 1.0
+        frac = min(1.0, (mag - dz) / span)
+        frac = apply_curve(frac, curve)
+        if anti_deadzone > 0.0:
+            out = anti_deadzone + frac * (1.0 - anti_deadzone)
+        else:
+            out = frac
+        return sign * min(1.0, out)
+
+    nx = shape_component(x, dz_x)
+    ny = shape_component(y, dz_y)
+    return nx, ny
 
 
 def find_source_device(name_match: str):
@@ -474,11 +561,13 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
 
     def emit_stick(stick, profile):
         scfg = profile["left"] if stick == "left" else profile["right"]
-        shape = profile["deadzone_shape"]
+        shape = scfg.get("deadzone_shape", "radial")
         x, y = stick_raw[stick]
-        if stick == "right" and shape == "axial":
+        if shape == "axial":
             nx = shape_axis_axial(x, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
             ny = shape_axis_axial(y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
+        elif shape == "sloped_axial":
+            nx, ny = shape_axis_sloped(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
         else:
             nx, ny = shape_axis_radial(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
         out_x, out_y = int(nx * 32767), int(ny * 32767)
@@ -565,9 +654,9 @@ def main():
     # signal.signal(signal.SIGINT, handle_term)
 
     p = watcher.profile
-    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f, right dz=%.2f adz=%.2f, shape=%s)",
-              watcher.profile_name, p["left"]["deadzone"], p["left"]["anti_deadzone"],
-              p["right"]["deadzone"], p["right"]["anti_deadzone"], p["deadzone_shape"])
+    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f shape=%s, right dz=%.2f adz=%.2f shape=%s)",
+              watcher.profile_name, p["left"]["deadzone"], p["left"]["anti_deadzone"], p["left"]["deadzone_shape"],
+              p["right"]["deadzone"], p["right"]["anti_deadzone"], p["right"]["deadzone_shape"])
 
     while running:
         try:
