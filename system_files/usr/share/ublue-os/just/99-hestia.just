@@ -3,7 +3,7 @@
 # Prevent automatic suspend/sleep/hibernate.
 [group("hestia")]
 hestia-disable-suspend:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
     gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
     gsettings set org.gnome.desktop.session idle-delay 0
@@ -11,7 +11,7 @@ hestia-disable-suspend:
 # Add switch/move-to workspace shortcuts (meta and shift+meta for "<" and "y").
 [group("hestia")]
 hestia-set-workspace-shortcuts:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Left', '<Super>less']"
     gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Right', '<Super>y']"
     gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Shift><Super>Left', '<Shift><Super>less']"
@@ -20,13 +20,13 @@ hestia-set-workspace-shortcuts:
 # Set the volume step amount (default: 2).
 [group("hestia")]
 hestia-set-volume-step step="2":
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     gsettings set org.gnome.settings-daemon.plugins.media-keys volume-step {{step}}
 
 # Create GNOME overview categories.
 [group("hestia")]
 hestia-setup-app-folders:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     dconf reset -f "/org/gnome/desktop/app-folders/"
     gsettings set org.gnome.desktop.app-folders folder-children "['Office', 'Graphics', 'Development', 'Audio&Video', 'Games', 'Education', 'Network', 'Science', 'Settings', 'System', 'Utilities', 'GamingUtilities', 'Containers', 'Misc', 'Wine', 'YaST', 'Pardus']"
     gsettings set org.gnome.desktop.app-folders.folder:/org/gnome/desktop/app-folders/folders/Office/ categories "['Office', 'WordProcessor', 'Spreadsheet', 'Presentation', 'Scanning']"
@@ -66,17 +66,23 @@ hestia-setup-app-folders:
 # Install default Hestia flatpaks.
 [group("hestia")]
 hestia-install-flatpaks:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     /usr/lib/hestia/install-flatpaks.sh
 
 # Fetch steam art for non-steam games.
 [group("hestia")]
 hestia-fetch-steam-art:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     /usr/lib/hestia/steam-art-fetch.py
 
 # Remove orphaned steam/proton prefixes.
 [group("hestia")]
 hestia-remove-orphaned-prefixes:
-    #!/usr/bin/bash
+    #!/usr/bin/env bash
     /usr/lib/hestia/steam-remove-orphaned-prefixes.sh
+
+# Disable StartupNotify for user .desktop entries.
+[group("hestia")]
+hestia-fix-startup-notify:
+    #!/usr/bin/env bash
+    /usr/lib/hestia/fix-startup-notify.sh

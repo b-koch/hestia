@@ -39,6 +39,9 @@ echo "Applying configurations..."
 echo "Adding Hestia branding..."
 /ctx/scripts/hestia_branding.sh
 
+echo "Enable services..."
+/ctx/scripts/enable_services.sh
+
 echo "Building initramfs..."
 /ctx/scripts/build-initramfs.sh
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=Disable StartupNotify in user desktop entries
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hestia/fix-startup-notify.sh
+
+[Install]
+WantedBy=default.target
