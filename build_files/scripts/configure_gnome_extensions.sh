@@ -15,6 +15,7 @@ ENABLE_EXTENSIONS=(
     "status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "weatheroclock@CleaMenezesJr.github.io"
     "bluetooth-battery-monitor@v8v88v8v88.com"
+    "deja-window@mcast.gnomext.com"
 )
 
 DISABLE_EXTENSIONS=(
