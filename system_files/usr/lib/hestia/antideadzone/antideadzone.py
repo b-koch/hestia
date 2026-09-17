@@ -476,7 +476,7 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
         scfg = profile["left"] if stick == "left" else profile["right"]
         shape = profile["deadzone_shape"]
         x, y = stick_raw[stick]
-        if shape == "axial":
+        if stick == "right" and shape == "axial":
             nx = shape_axis_axial(x, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
             ny = shape_axis_axial(y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
         else:
