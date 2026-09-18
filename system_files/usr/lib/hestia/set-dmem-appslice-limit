@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+# Keep a small VRAM reserve to avoid hitting the physical limit.
+RESERVE_MIB=100
+RESERVE=$((RESERVE_MIB * 1024 * 1024))
+
+wait_for() {
+    local description=$1
+    shift
+
+    for _ in {1..120}; do
+        if "$@"; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: timed out waiting for $description." >&2
+    return 1
+}
+
+find_graphical_user() {
+    local session
+    local type
+    local state
+    local remote
+    local user
+
+    while read -r session _; do
+        type=$(loginctl show-session "$session" -p Type --value 2>/dev/null)
+        state=$(loginctl show-session "$session" -p State --value 2>/dev/null)
+        remote=$(loginctl show-session "$session" -p Remote --value 2>/dev/null)
+
+        if [[ "$state" != "active" || "$remote" != "no" ]]; then
+            continue
+        fi
+
+        if [[ "$type" == "wayland" || "$type" == "x11" ]]; then
+            user=$(loginctl show-session "$session" -p User --value 2>/dev/null)
+
+            if [[ -n "$user" ]]; then
+                printf '%s\n' "$user"
+                return 0
+            fi
+        fi
+    done < <(loginctl list-sessions --no-legend --no-pager 2>/dev/null)
+
+    return 1
+}
+
+has_dmem_controller() {
+    grep -qw dmem "$1/cgroup.controllers"
+}
+
+enable_dmem_controller() {
+    local cgroup=$1
+
+    if grep -qw dmem "$cgroup/cgroup.subtree_control" 2>/dev/null; then
+        return 0
+    fi
+
+    printf '+dmem\n' > "$cgroup/cgroup.subtree_control" 2>/dev/null || true
+    grep -qw dmem "$cgroup/cgroup.subtree_control" 2>/dev/null
+}
+
+USER_ID=$(wait_for "graphical user session" find_graphical_user) || exit 1
+
+USER_CGROUP="/sys/fs/cgroup/user.slice/user-${USER_ID}.slice/user@${USER_ID}.service"
+APP_CGROUP="$USER_CGROUP/app.slice"
+
+wait_for "user cgroup" test -d "$USER_CGROUP" || exit 1
+wait_for "app.slice" test -d "$APP_CGROUP" || exit 1
+
+wait_for "dmem controller" has_dmem_controller "$USER_CGROUP" || exit 1
+wait_for "dmem controller to be enabled" enable_dmem_controller "$USER_CGROUP" || exit 1
+
+wait_for "dmem controller on app.slice" has_dmem_controller "$APP_CGROUP" || exit 1
+wait_for "dmem controller on app.slice to be enabled" enable_dmem_controller "$APP_CGROUP" || exit 1
+
+wait_for "app.slice dmem.max" test -f "$APP_CGROUP/dmem.max" || exit 1
+wait_for "app.slice dmem.current" test -f "$APP_CGROUP/dmem.current" || exit 1
+
+DEVICE=$(awk '/\/vram / { print $1; exit }' /sys/fs/cgroup/dmem.capacity)
+CAPACITY=$(awk '/\/vram / { print $2; exit }' /sys/fs/cgroup/dmem.capacity)
+
+if [[ -z "$DEVICE" || -z "$CAPACITY" ]]; then
+    echo "ERROR: could not read GPU VRAM capacity." >&2
+    exit 1
+fi
+
+LIMIT=$((CAPACITY - RESERVE))
+
+if (( LIMIT <= 0 )); then
+    echo "ERROR: VRAM reserve exceeds GPU capacity." >&2
+    exit 1
+fi
+
+CURRENT=$(awk '/\/vram$/ { print $2; exit }' "$APP_CGROUP/dmem.current")
+
+if [[ -n "$CURRENT" ]] && (( CURRENT > LIMIT )); then
+    echo "ERROR: current VRAM usage exceeds the requested limit." >&2
+    exit 1
+fi
+
+printf '%s %s\n' "$DEVICE" "$LIMIT" > "$APP_CGROUP/dmem.max"
+
+echo "VRAM limit set to $LIMIT bytes for UID $USER_ID."

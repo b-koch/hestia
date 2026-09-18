@@ -1,0 +1,12 @@
+[Unit]
+Description=Limit app.slice GPU VRAM usage
+After=systemd-logind.service graphical.target
+Wants=graphical.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hestia/set-dmem-appslice-limit
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target
