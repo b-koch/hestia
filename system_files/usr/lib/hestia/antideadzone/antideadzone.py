@@ -7,15 +7,6 @@ Reads a physical gamepad via evdev, applies deadzone + anti-deadzone
 Xbox 360 style gamepad via uinput. All non-stick events (buttons,
 triggers, d-pad) are passed through unmodified.
 
-Runs as a long-lived daemon that survives controller unplug/replug,
-and also picks up a controller plugged in for the first time after
-the daemon started (no restart needed). Reconnection is event-driven
-via udev/netlink rather than polling: the daemon blocks on a udev
-monitor waiting for the kernel to announce a new joystick-capable
-input device, instead of repeatedly re-scanning /dev/input on a
-timer. Meant to be run under systemd as a user service (see
-antideadzone.service).
-
 Config: /etc/hestia-antideadzone/config.json or
         ~/.config/hestia-antideadzone/config.json (JSON)
 
@@ -55,15 +46,10 @@ CONFIG_PATHS = [
 ]
 
 DEFAULT_PROFILE = {
-    "left": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0, "deadzone_shape": "radial"},
-    "right": {"deadzone": 0.00, "anti_deadzone": 0.00, "curve": 1.0, "deadzone_shape": "radial"},
+    "left": {"deadzone": 0.05, "anti_deadzone": 0.25, "curve": 1.0, "deadzone_shape": "radial"},
+    "right": {"deadzone": 0.01, "anti_deadzone": 0.25, "curve": 2.0, "deadzone_shape": "radial"},
 }
 
-# "off" is always available even if the user never defines it: it
-# passes sticks through raw (deadzone/anti_deadzone both 0), so
-# switching to it for a game that fights with any shaping is a
-# single active_profile change away, same mechanism as switching
-# to a real profile.
 BUILTIN_OFF_PROFILE = {
     "left": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0, "deadzone_shape": "radial"},
     "right": {"deadzone": 0.0, "anti_deadzone": 0.0, "curve": 1.0, "deadzone_shape": "radial"},
@@ -72,9 +58,7 @@ BUILTIN_OFF_PROFILE = {
 DEFAULT_CONFIG = {
     # Substring match (case-insensitive) against the evdev device name.
     # Leave empty to match the first gamepad-looking device found.
-    "device_name_match": "Generic X-Box pad",
-    # Which profile below is currently active. Change this (by hand
-    # or via switch-profile.py) to switch behavior on the fly.
+    "device_name_match": "",
     "active_profile": "default",
     "profiles": {
         "off": BUILTIN_OFF_PROFILE,
@@ -143,6 +127,34 @@ def active_profile(cfg):
             merged[k].update(v)
         else:
             merged[k] = v
+
+    # Config values come straight from JSON, so a config with e.g.
+    # "anti_deadzone": "0.25" (quoted by mistake) would otherwise
+    # crash deep inside the shaping math with a confusing
+    # str-vs-number TypeError. Coerce here, once, so a typo in the
+    # config degrades to a logged warning + a safe default instead
+    # of taking the whole daemon down.
+    numeric_fields = {
+        "deadzone": 0.0,
+        "anti_deadzone": 0.0,
+        "curve": 1.0,
+        "sloped_dominance_curve": 1.0,
+    }
+    for stick in ("left", "right"):
+        scfg = merged.get(stick, {})
+        for field_name, fallback in numeric_fields.items():
+            if field_name not in scfg:
+                continue
+            val = scfg[field_name]
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                try:
+                    scfg[field_name] = float(val)
+                except (TypeError, ValueError):
+                    log.warning(
+                        "profile '%s' stick '%s': %s=%r is not a number, using %s",
+                        name, stick, field_name, val, fallback,
+                    )
+                    scfg[field_name] = fallback
     return name, merged
 
 
@@ -174,25 +186,58 @@ def apply_curve(mag, curve):
     return math.pow(mag, curve)
 
 
+def _shape_component(v, dz, anti_deadzone, curve, scaled, dominance=1.0):
+    """Shared per-axis shaping used by every axial-family shape
+    (Axial, Sloped Axial, Sloped Scaled Axial, and the axial half of
+    Hybrid). `dz` is this axis's own deadzone threshold -- callers
+    pass either the flat configured deadzone (plain Axial) or a
+    per-push sloped value (Sloped variants).
+
+    `scaled=True` rescales output to start at 0 right at the
+    deadzone edge and ramp smoothly to 1 (PadForge's "Scaled"
+    variants; matches Steam Input's own anti-deadzone formula:
+    output = antiDeadZone + stickInput * (1 - antiDeadZone)).
+    `scaled=False` skips the rescale -- output jumps directly to the
+    raw magnitude at the boundary, for games that already do their
+    own rescaling.
+
+    `dominance` (0..1, default 1.0 = no effect) scales how much of
+    `anti_deadzone` actually applies to this axis. Only the Sloped
+    variants pass anything other than 1.0 here -- see
+    shape_axis_sloped's docstring for why."""
+    sign = 1.0 if v >= 0 else -1.0
+    mag = abs(v)
+    if mag <= dz:
+        return 0.0
+    if scaled:
+        span = (1.0 - dz) if dz < 1.0 else 1.0
+        frac = min(1.0, (mag - dz) / span)
+        frac = apply_curve(frac, curve)
+    else:
+        frac = min(1.0, mag)
+    effective_adz = anti_deadzone * dominance
+    if effective_adz > 0.0:
+        out = effective_adz + frac * (1.0 - effective_adz)
+    else:
+        out = frac
+    return sign * min(1.0, out)
+
+
 def shape_axis_radial(x, y, deadzone, anti_deadzone, curve):
-    """Circular deadzone with rescale-from-edge, then anti-deadzone
-    floor, applied to the (x, y) vector as a whole so diagonals are
+    """Circular deadzone, rescaled from the deadzone edge so output
+    starts at 0 right at the boundary and ramps smoothly to 1 -- no
+    jump. Applied to the (x, y) vector as a whole so diagonals are
     not clipped or squared off."""
     mag = math.hypot(x, y)
-    if mag < 1e-6:
-        return 0.0, 0.0
-    if mag <= deadzone:
+    if mag < 1e-6 or mag <= deadzone:
         return 0.0, 0.0
 
-    # Rescale so output starts at 0 right at the deadzone edge.
-    scaled = (mag - deadzone) / (1.0 - deadzone) if deadzone < 1.0 else mag
-    scaled = max(0.0, min(1.0, scaled))
+    span = (1.0 - deadzone) if deadzone < 1.0 else 1.0
+    scaled = min(1.0, (mag - deadzone) / span)
     scaled = apply_curve(scaled, curve)
-
-    # Anti-deadzone: once past the deadzone, output jumps to at least
-    # this floor, then ramps the remaining range up to 1.0.
     if anti_deadzone > 0.0:
         scaled = anti_deadzone + scaled * (1.0 - anti_deadzone)
+    scaled = min(1.0, scaled)
 
     scale = scaled / mag
     nx = max(-1.0, min(1.0, x * scale))
@@ -200,108 +245,196 @@ def shape_axis_radial(x, y, deadzone, anti_deadzone, curve):
     return nx, ny
 
 
+def shape_axis_radial_unscaled(x, y, deadzone, anti_deadzone, curve):
+    """Same circular deadzone region as Scaled Radial, but no
+    rescale -- output jumps directly to the raw magnitude the instant
+    the vector crosses the deadzone boundary, rather than ramping
+    from 0. Intended for games that already rescale their own input,
+    so this daemon shouldn't rescale a second time on top."""
+    mag = math.hypot(x, y)
+    if mag < 1e-6 or mag <= deadzone:
+        return 0.0, 0.0
+
+    out_mag = min(1.0, mag)
+    if anti_deadzone > 0.0:
+        out_mag = max(out_mag, anti_deadzone + out_mag * (1.0 - anti_deadzone))
+        out_mag = min(1.0, out_mag)
+
+    scale = out_mag / mag
+    nx = max(-1.0, min(1.0, x * scale))
+    ny = max(-1.0, min(1.0, y * scale))
+    return nx, ny
+
+
 def shape_axis_axial(v, deadzone, anti_deadzone, curve):
-    """True per-axis deadzone/anti-deadzone -- deliberately not
-    vector-based. This exists specifically to defeat games (many
-    UE4/5 titles, e.g. Hogwarts Legacy) whose own built-in deadzone
-    is also axial: each axis independently zeroes below its own
-    deadzone and rescales past it, chamfering diagonals at the
-    corners rather than using a circular radius (see Unreal's
+    """True per-axis deadzone/anti-deadzone with a FLAT threshold --
+    deliberately not vector-based. This exists specifically to defeat
+    games (many UE4/5 titles) whose own built-in
+    deadzone is also axial: each axis independently zeroes below its
+    own deadzone and rescales past it, chamfering diagonals at the
+    corners rather than using a circular radius (see Unreal's 
     EDeadZoneType::Axial docs). Pre-boosting each axis here the same
     way, so the pre-boosted value survives the game re-applying its
     own per-axis deadzone on top, is what actually restores movement
-    on a diagonal push that the game would otherwise eat entirely --
-    a vector/magnitude-based boost does NOT survive that, since the
+    on a diagonal push the game would otherwise eat entirely -- a
+    vector/magnitude-based boost does NOT survive that, since the
     game only ever sees this axis's own value, not the vector angle
-    we computed it from.
+    it was computed from.
 
-    This does distort the angle of shallow diagonal pushes near the
-    deadzone edge (small pushes can register as pure-cardinal, or as
-    a steeper angle than intended, until deflection is well past the
+    Distorts the angle of shallow diagonal pushes near the deadzone
+    edge (small pushes can register as pure-cardinal, or as a
+    steeper angle than intended, until deflection is well past the
     floor) -- that's an inherent consequence of two independent
     per-axis thresholds being crossed at different points, not a
     bug, and it's the same distortion the game's own axial deadzone
-    would already introduce on raw input. Use the radial shape
-    instead if that distortion matters more to you than reliably
-    beating a per-axis deadzone downstream."""
-    sign = 1.0 if v >= 0 else -1.0
-    mag = abs(v)
-    if mag <= deadzone:
-        return 0.0
+    would already introduce on raw input. Sloped Axial (below)
+    softens this while keeping the same downstream-deadzone
+    guarantee."""
+    return _shape_component(v, deadzone, anti_deadzone, curve, scaled=True)
+
+
+def shape_axis_axial_unscaled(v, deadzone, anti_deadzone, curve):
+    """Same flat per-axis deadzone as shape_axis_axial, but no rescale --
+    output jumps directly to the raw per-axis value at the boundary."""
+    return _shape_component(v, deadzone, anti_deadzone, curve, scaled=False)
+
+
+def _sloped_deadzones(x, y, deadzone):
+    """Shared wedge-shaped per-axis deadzone used by both Sloped
+    Axial variants: axis X's effective deadzone shrinks toward 0 as
+    Y approaches 0 (and vice versa), rather than staying at a flat
+    value. Based on the documented "sloped axial" deadzone from Josh
+    Sutphin's thumbstick dead zone article and its extension at
+    github.com/Minimuino/thumbstick-deadzones."""
+    return deadzone * abs(y), deadzone * abs(x)
+
+
+def shape_axis_sloped(x, y, deadzone, anti_deadzone, curve, dominance_curve=1.0):
+    """A well-tested approach specifically designed to fix Axial's
+    "snap to grid" problem at low deflection while keeping Axial's
+    precise single-axis control at high deflection: a push that's
+    genuinely close to one cardinal direction gets an almost-zero
+    deadzone on the *other* axis (letting a small amount of that
+    axis through cleanly), while a push that's already diagonal
+    gets a normal deadzone on both. The reference project's own
+    test suite explicitly checks "is it possible to perform a slow
+    horizontal/vertical motion" and "is it easy to perform a pure
+    horizontal/vertical motion" and passes both, where plain Axial
+    fails the first.
+
+    The naive per-axis sloped formula (dz_x = deadzone*abs(y), dz_y
+    = deadzone*abs(x)) has a real gap right where a deadzone matters
+    most: when the stick is genuinely at rest or drifting near
+    center, BOTH x and y are small, so BOTH sloped thresholds
+    collapse toward 0 at the same time -- meaning stick noise/drift
+    passes straight through ungated and then gets boosted by
+    anti_deadzone regardless of how large `deadzone` is configured.
+    So a real center deadzone (vector magnitude vs `deadzone`) is
+    checked FIRST, before any per-axis sloped shaping runs.
+
+    A second, related problem: once a minor axis's (now-tiny) sloped
+    threshold is crossed at all -- even by ordinary stick noise well
+    short of a real diagonal push -- the anti_deadzone floor used to
+    apply at FULL strength on that axis, same as the dominant axis.
+    Since the sloped threshold can be crossed by a much smaller value
+    than anti_deadzone itself, this meant even near-perfect single-
+    axis pushes would frequently snap toward ~45 degrees whenever the
+    other axis had any real-world noise above its own tiny threshold.
+
+    `dominance_curve` controls how much of `anti_deadzone` actually
+    reaches a minor axis, scaled by how large that axis's own value
+    is relative to the dominant axis (min(|minor|/|major|, 1),
+    raised to this power): 0.0 reproduces the old flat-floor
+    behavior (anti_deadzone applies at full strength the instant the
+    sloped threshold is crossed -- strongest guarantee that a real
+    diagonal push clears a downstream game's own per-axis deadzone,
+    but snaps toward 45 degrees on ordinary single-axis noise); 1.0
+    (the default) scales the floor linearly with dominance (clean,
+    stable single-axis pushes, but a shallow real diagonal gets a
+    weaker boost and may not clear an aggressive game deadzone as
+    reliably); values in between blend the two. There's no formula
+    that removes this trade-off -- a tiny minor-axis value looks
+    identical whether it's noise or a genuine shallow diagonal, so
+    tune this to whichever failure mode is worse for your game."""
+    if math.hypot(x, y) <= deadzone:
+        return 0.0, 0.0
+    dz_x, dz_y = _sloped_deadzones(x, y, deadzone)
+    ax, ay = abs(x), abs(y)
+    dom_x = min(1.0, ax / ay) if ay > 1e-9 else 1.0
+    dom_y = min(1.0, ay / ax) if ax > 1e-9 else 1.0
+    if dominance_curve != 1.0:
+        dom_x = dom_x ** dominance_curve if dominance_curve > 0 else 1.0
+        dom_y = dom_y ** dominance_curve if dominance_curve > 0 else 1.0
+    nx = _shape_component(x, dz_x, anti_deadzone, curve, scaled=True, dominance=dom_x)
+    ny = _shape_component(y, dz_y, anti_deadzone, curve, scaled=True, dominance=dom_y)
+    return nx, ny
+
+
+def shape_axis_sloped_unscaled(x, y, deadzone, anti_deadzone, curve, dominance_curve=1.0):
+    """Same wedge-shaped per-axis deadzone as Sloped Scaled Axial,
+    but no rescale -- output may jump at the boundary rather than
+    ramping from 0. Intended for games that already rescale their
+    own input. Same center-deadzone guard and dominance_curve tuning
+    as shape_axis_sloped, and for the same reasons (see that function's
+    docstring)."""
+    if math.hypot(x, y) <= deadzone:
+        return 0.0, 0.0
+    dz_x, dz_y = _sloped_deadzones(x, y, deadzone)
+    ax, ay = abs(x), abs(y)
+    dom_x = min(1.0, ax / ay) if ay > 1e-9 else 1.0
+    dom_y = min(1.0, ay / ax) if ax > 1e-9 else 1.0
+    if dominance_curve != 1.0:
+        dom_x = dom_x ** dominance_curve if dominance_curve > 0 else 1.0
+        dom_y = dom_y ** dominance_curve if dominance_curve > 0 else 1.0
+    nx = _shape_component(x, dz_x, anti_deadzone, curve, scaled=False, dominance=dom_x)
+    ny = _shape_component(y, dz_y, anti_deadzone, curve, scaled=False, dominance=dom_y)
+    return nx, ny
+
+
+def shape_axis_hybrid(x, y, deadzone, anti_deadzone, curve, dominance_curve=1.0):
+    """PadForge "Hybrid": a literal two-stage pipeline, matching the
+    reference implementation's own dz_hybrid exactly -- Scaled
+    Radial first (eliminates center noise / stick jitter with smooth
+    circular falloff), then Sloped Scaled Axial applied to THAT
+    already-shaped result (adds wedge-shaped axis filtering on top).
+    Per the reference article: "the order in which the transforms
+    are applied is relevant: scaled radial must be called first in
+    order to avoid distortion for low input values." Anti-deadzone
+    is applied once, inside the second (sloped axial) stage, since
+    applying it in both stages would double-boost.
+
+    PadForge's own docs describe this as suited to "competitive
+    shooters needing clean center behavior and precise cardinal-
+    direction tracking" -- smoother near dead-center than plain
+    Sloped Scaled Axial, at the cost of an extra processing step.
+    `dominance_curve` has the same meaning and trade-off here as in
+    shape_axis_sloped, applied to this function's second stage."""
+    # Stage 1: Scaled Radial, WITHOUT anti-deadzone -- that's applied
+    # once, in stage 2, to avoid double-boosting.
+    mag = math.hypot(x, y)
+    if mag < 1e-6 or mag <= deadzone:
+        return 0.0, 0.0
     span = (1.0 - deadzone) if deadzone < 1.0 else 1.0
-    frac = min(1.0, (mag - deadzone) / span)
-    frac = apply_curve(frac, curve)
-    if anti_deadzone > 0.0:
-        # Jump straight to the anti_deadzone floor at the deadzone
-        # edge, then ramp the remainder up to 1.0 -- same shape as
-        # radial's boost, just applied per-axis.
-        out = anti_deadzone + frac * (1.0 - anti_deadzone)
-    else:
-        out = frac
-    out = min(1.0, out)
-    return sign * out
+    radial_scaled = min(1.0, (mag - deadzone) / span)
+    radial_scaled = apply_curve(radial_scaled, curve)
+    scale = radial_scaled / mag
+    rx = max(-1.0, min(1.0, x * scale))
+    ry = max(-1.0, min(1.0, y * scale))
 
-
-def shape_axis_sloped(x, y, deadzone, anti_deadzone, curve):
-    """Third deadzone_shape option: sloped (a.k.a. "cross with wedge
-    edges") per-axis deadzone, plus anti-deadzone. Based on the
-    documented "sloped axial" / "sloped scaled axial" deadzone from
-    Josh Sutphin's thumbstick dead zone article and its extension at
-    github.com/Minimuino/thumbstick-deadzones (also shipped as
-    PadForge's "Sloped Scaled Axial" shape) -- a well-tested approach
-    specifically designed to fix axial's "snap to grid" problem at
-    low deflection while keeping axial's precise single-axis control
-    at high deflection.
-
-    Unlike plain axial, each axis's deadzone is not a fixed value:
-    axis X's effective deadzone is `deadzone * abs(y)`, and axis Y's
-    is `deadzone * abs(x)`. So a push that's genuinely close to one
-    cardinal direction gets an almost-zero deadzone on the *other*
-    axis (letting a small amount of that axis through cleanly), while
-    a push that's already diagonal gets a normal deadzone on both --
-    this is what removes the hard 45-degree snap: the reference
-    project's own test suite explicitly checks "is it possible to
-    perform a slow horizontal/vertical motion" and "is it easy to
-    perform a pure horizontal/vertical motion" and passes both,
-    where plain axial fails the first and hybrid (vector-gated,
-    flat-floored -- tried here and discarded for feeling like a
-    hard 45-degree snap) fails differently by collapsing angle
-    entirely near the deadzone edge.
-
-    The anti-deadzone floor is then layered on per-axis, using each
-    axis's own sloped threshdold as the jump-off point -- this keeps
-    the "reliably clears a downstream game's own per-axis deadzone"
-    property that plain axial has and hybrid was chosen over, while
-    the sloped gate underneath noticeably softens the angle
-    distortion (verified: a 22-degree push now reads as 30-44
-    degrees depending on deflection, versus hybrid's flat 45 degrees
-    at every deflection). It does not eliminate angle distortion
-    entirely -- that's the same fundamental tension as axial/hybrid,
-    since the floor still has to be large enough to survive the
-    game's own deadzone -- and a fully-deflected diagonal squares off
-    slightly (each axis boosted toward, but not exactly reaching, the
-    shared ceiling) rather than keeping its exact raw proportion,
-    same documented characteristic the reference project's own
-    "hybrid" shape has at full deflection."""
-    dz_x = deadzone * abs(y)
-    dz_y = deadzone * abs(x)
-
-    def shape_component(v, dz):
-        sign = 1.0 if v >= 0 else -1.0
-        mag = abs(v)
-        if mag <= dz:
-            return 0.0
-        span = (1.0 - dz) if dz < 1.0 else 1.0
-        frac = min(1.0, (mag - dz) / span)
-        frac = apply_curve(frac, curve)
-        if anti_deadzone > 0.0:
-            out = anti_deadzone + frac * (1.0 - anti_deadzone)
-        else:
-            out = frac
-        return sign * min(1.0, out)
-
-    nx = shape_component(x, dz_x)
-    ny = shape_component(y, dz_y)
+    # Stage 2: Sloped Scaled Axial on the stage-1 result, this time
+    # with anti-deadzone and curve both applied (curve was already
+    # applied once above on magnitude; apply again per-axis matches
+    # the reference's straightforward composition of the two
+    # functions as independent stages).
+    dz_x, dz_y = _sloped_deadzones(rx, ry, deadzone)
+    arx, ary = abs(rx), abs(ry)
+    dom_x = min(1.0, arx / ary) if ary > 1e-9 else 1.0
+    dom_y = min(1.0, ary / arx) if arx > 1e-9 else 1.0
+    if dominance_curve != 1.0:
+        dom_x = dom_x ** dominance_curve if dominance_curve > 0 else 1.0
+        dom_y = dom_y ** dominance_curve if dominance_curve > 0 else 1.0
+    nx = _shape_component(rx, dz_x, anti_deadzone, curve, scaled=True, dominance=dom_x)
+    ny = _shape_component(ry, dz_y, anti_deadzone, curve, scaled=True, dominance=dom_y)
     return nx, ny
 
 
@@ -559,17 +692,33 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
     debug_count = 0
     last_config_check = 0.0
 
+    # Maps config "deadzone_shape" string to the function that
+    # implements it, matching PadForge's own shape names, plus
+    # whether that function accepts the extra sloped_dominance_curve
+    # tuning knob (only the sloped-family shapes do). Kept as a
+    # module-level-ish dict here (closed over cfg/curve args at call
+    # time) so adding a shape later is a one-line addition.
+    SHAPE_FUNCS = {
+        "radial": ("vector", shape_axis_radial, False),
+        "radial_unscaled": ("vector", shape_axis_radial_unscaled, False),
+        "axial": ("per_axis", shape_axis_axial, False),
+        "axial_unscaled": ("per_axis", shape_axis_axial_unscaled, False),
+        "sloped_axial": ("vector", shape_axis_sloped, True),
+        "sloped_axial_unscaled": ("vector", shape_axis_sloped_unscaled, True),
+        "hybrid": ("vector", shape_axis_hybrid, True),
+    }
+
     def emit_stick(stick, profile):
         scfg = profile["left"] if stick == "left" else profile["right"]
         shape = scfg.get("deadzone_shape", "radial")
         x, y = stick_raw[stick]
-        if shape == "axial":
-            nx = shape_axis_axial(x, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
-            ny = shape_axis_axial(y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
-        elif shape == "sloped_axial":
-            nx, ny = shape_axis_sloped(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
+        kind, func, takes_dom_curve = SHAPE_FUNCS.get(shape, SHAPE_FUNCS["radial"])
+        extra = (scfg.get("sloped_dominance_curve", 1.0),) if takes_dom_curve else ()
+        if kind == "per_axis":
+            nx = func(x, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"], *extra)
+            ny = func(y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"], *extra)
         else:
-            nx, ny = shape_axis_radial(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"])
+            nx, ny = func(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"], *extra)
         out_x, out_y = int(nx * 32767), int(ny * 32767)
         ax_x, ax_y = STICK_AXES[stick]
         uin.write(ecodes.EV_ABS, ax_x, out_x)

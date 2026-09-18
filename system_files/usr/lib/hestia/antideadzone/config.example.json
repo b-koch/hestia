@@ -1,10 +1,10 @@
 {
   "_comment": "Copy this to ~/.config/hestia-antideadzone/config.json and edit. JSON has no comments, so any '_xxx_help' key is documentation only and is ignored by the daemon.",
-  "device_name_match": "Generic X-Box pad",
+  "device_name_match": "",
   "_device_name_match_help": "Case-insensitive substring to pick your pad if you have multiple input devices (e.g. 'Xbox', 'DualSense', '8BitDo'). Leave empty to auto-pick the first thing that looks like a gamepad. Run list-devices.py to see exact names.",
   "active_profile": "hogwarts",
   "profiles": {
-    "default": {
+    "off": {
       "left": {
         "deadzone_shape": "radial",
         "deadzone": 0.0,
@@ -18,18 +18,48 @@
         "curve": 1.0
       }
     },
-    "off": {
+    "default": {
       "left": {
         "deadzone_shape": "radial",
-        "deadzone": 0.0,
-        "anti_deadzone": 0.0,
+        "deadzone": 0.05,
+        "anti_deadzone": 0.25,
         "curve": 1.0
       },
       "right": {
         "deadzone_shape": "radial",
-        "deadzone": 0.0,
-        "anti_deadzone": 0.0,
+        "deadzone": 0.01,
+        "anti_deadzone": 0.25,
+        "curve": 2.0
+      }
+    },
+    "radial": {
+      "left": {
+        "deadzone_shape": "radial",
+        "deadzone": 0.05,
+        "anti_deadzone": 0.25,
         "curve": 1.0
+      },
+      "right": {
+        "deadzone_shape": "radial",
+        "deadzone": 0.01,
+        "anti_deadzone": 0.25,
+        "curve": 2.0
+      }
+    },
+    "axial": {
+      "left": {
+        "sloped_dominance_curve": 1.0,
+        "deadzone_shape": "sloped_axial",
+        "deadzone": 0.05,
+        "anti_deadzone": 0.25,
+        "curve": 1.0
+      },
+      "right": {
+        "sloped_dominance_curve": 0.0,
+        "deadzone_shape": "sloped_axial",
+        "deadzone": 0.01,
+        "anti_deadzone": 0.25,
+        "curve": 2.0
       }
     },
     "10": {
@@ -94,12 +124,14 @@
     },
     "hogwarts": {
       "left": {
+        "sloped_dominance_curve": 1.0,
         "deadzone_shape": "sloped_axial",
-        "deadzone": 0.03,
+        "deadzone": 0.05,
         "anti_deadzone": 0.25,
         "curve": 1.0
       },
       "right": {
+        "sloped_dominance_curve": 0.0,
         "deadzone_shape": "sloped_axial",
         "deadzone": 0.01,
         "anti_deadzone": 0.25,
@@ -137,11 +169,7 @@
       }
     }
   },
-  "_profile_help": "Each of 'left'/'right' carries its own settings, including deadzone_shape, so the two sticks can use different shapes (e.g. axial on the right stick for a game with its own per-axis deadzone, radial on the left for smooth movement). deadzone: 0-1, fraction of stick travel ignored near center (raise if you have stick drift). anti_deadzone: 0-1, the output floor the instant the stick leaves the deadzone -- this is the setting that defeats a game's own internal deadzone, same concept as Steam Input's. curve: 1.0 = linear; >1.0 gives more fine control near center at the cost of feeling 'slower' to ramp up (try 1.5-2.0); <1.0 is the opposite (twitchier near center). deadzone_shape (per stick, one of three): 'radial' (recommended default -- circular, diagonals stay smooth and proportional at every deflection); 'axial' (true per-axis deadzone/anti-deadzone with a FLAT per-axis threshold, matching games whose own deadzone is also axial, e.g. many UE4/5 titles like Hogwarts Legacy -- reliably restores movement on a diagonal push the game would otherwise eat, but distorts angle noticeably near the deadzone edge, e.g. a shallow-angle push can snap toward 45 degrees, and needs more total deflection at an angle than straight on before anything registers); 'sloped_axial' (based on the published 'sloped scaled axial' deadzone -- each axis's own deadzone shrinks toward 0 as the OTHER axis approaches 0, so a near-cardinal push barely deadzones the off-axis at all, which removes the extra-push-at-an-angle threshold mismatch and meaningfully softens (but doesn't eliminate) the 45-degree snap; still floors each axis independently like axial, so it keeps axial's reliability against a downstream game's own per-axis deadzone -- recommended over plain axial for games with an axial deadzone unless you have a specific reason to want the flatter threshold).",
   "rescan_interval": 1.0,
-  "_rescan_interval_help": "Seconds between reconnect attempts while no matching controller is found. Each attempt just opens the /dev/input/event* nodes and reads capabilities -- a few ms of local syscalls -- so 1s or even lower isn't a meaningful CPU cost.",
   "reload_interval": 1.0,
-  "_reload_interval_help": "Seconds between checks of this file's last-modified time. Lower = more responsive profile switches, higher = very slightly less overhead. 1 second is already fast enough to switch mid-game between menu screens.",
-  "debug_sample_rate": 5,
-  "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables."
+  "debug_sample_rate": 5
 }
