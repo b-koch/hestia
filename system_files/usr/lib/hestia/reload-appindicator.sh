@@ -1,4 +1,3 @@
-```bash
 #!/usr/bin/env bash
 
 set -euo pipefail
@@ -14,4 +13,3 @@ echo "Re-enabling AppIndicator extension..."
 gnome-extensions enable "$EXTENSION"
 
 echo "AppIndicator extension reloaded."
-```
