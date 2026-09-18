@@ -88,6 +88,16 @@ DEFAULT_CONFIG = {
     "reload_interval": 1.0,
     # Log every N processed stick events at debug level (0 disables).
     "debug_sample_rate": 0,
+    # Cap how often stick ABS events are sent to the virtual device,
+    # in Hz. 0 (default) disables the cap -- send every shaped value
+    # as fast as the source controller reports it. Useful for high
+    # polling rate controllers (500/1000Hz) under Proton, where
+    # XInput emulation can buffer/lag on very frequent input; 250Hz
+    # matches a real Xbox 360 controller's native polling rate.
+    # Buttons/triggers/dpad are never rate-limited, only the stick
+    # axes -- and the most recent shaped value is always eventually
+    # sent, never dropped outright.
+    "max_output_hz": 0,
 }
 
 STICK_AXES = {
@@ -637,7 +647,9 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
         "hybrid": ("vector", shape_axis_hybrid, True),
     }
 
-    def emit_stick(stick, profile):
+    def shape_stick(stick, profile):
+        """Run one stick's raw (x, y) through its configured shape.
+        Does not touch uin -- see emit_stick / flush_stick for that."""
         scfg = profile["left"] if stick == "left" else profile["right"]
         shape = scfg.get("deadzone_shape", "radial")
         x, y = stick_raw[stick]
@@ -648,11 +660,85 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
             ny = func(y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"], *extra)
         else:
             nx, ny = func(x, y, scfg["deadzone"], scfg["anti_deadzone"], scfg["curve"], *extra)
-        out_x, out_y = int(nx * 32767), int(ny * 32767)
+        return x, y, int(nx * 32767), int(ny * 32767)
+
+    # Output rate limiting (max_output_hz): pending[stick] holds the
+    # most recently shaped-but-not-yet-written value for that stick,
+    # or None if nothing is waiting. A stick's ABS events are only
+    # actually written to uin at most once per min_interval seconds;
+    # everything shaped in between just overwrites `pending` so the
+    # most recent value is what eventually goes out -- nothing is
+    # silently dropped forever, it's coalesced to the latest sample.
+    # min_interval == 0 means no limiting: emit_stick writes straight
+    # through immediately, same as before this feature existed.
+    last_sent_time = {"left": 0.0, "right": 0.0}
+    pending = {"left": None, "right": None}
+
+    def min_interval():
+        hz = cfg.get("max_output_hz", 0)
+        if isinstance(hz, bool) or not isinstance(hz, (int, float)):
+            try:
+                hz = float(hz)
+            except (TypeError, ValueError):
+                hz = 0
+        return (1.0 / hz) if hz and hz > 0 else 0.0
+
+    def emit_stick(stick, profile):
+        """Shape the stick's current raw position and either write it
+        immediately (no rate limit configured, or enough time has
+        passed since the last write for this stick) or stash it in
+        `pending` to be flushed later by flush_pending_sticks()."""
+        x, y, out_x, out_y = shape_stick(stick, profile)
+        interval = min_interval()
+        now = time.monotonic()
+        if interval <= 0.0 or (now - last_sent_time[stick]) >= interval:
+            write_stick(stick, out_x, out_y)
+            last_sent_time[stick] = now
+            pending[stick] = None
+        else:
+            pending[stick] = (out_x, out_y)
+        return x, y, out_x, out_y
+
+    def write_stick(stick, out_x, out_y):
         ax_x, ax_y = STICK_AXES[stick]
         uin.write(ecodes.EV_ABS, ax_x, out_x)
         uin.write(ecodes.EV_ABS, ax_y, out_y)
-        return x, y, out_x, out_y
+
+    def flush_pending_sticks():
+        """Write out any stick whose throttle window has elapsed
+        since it was last stashed in `pending`. Called every loop
+        iteration (including on the select() timeout) so a value
+        that's just being held steady -- not re-triggered by new
+        stick movement -- still goes out promptly instead of waiting
+        indefinitely for the next physical event."""
+        interval = min_interval()
+        if interval <= 0.0:
+            return False
+        now = time.monotonic()
+        wrote = False
+        for stick in ("left", "right"):
+            if pending[stick] is not None and (now - last_sent_time[stick]) >= interval:
+                out_x, out_y = pending[stick]
+                write_stick(stick, out_x, out_y)
+                last_sent_time[stick] = now
+                pending[stick] = None
+                wrote = True
+        return wrote
+
+    def next_flush_wait():
+        """Seconds until the earliest pending stick's throttle window
+        elapses, for sizing the select() timeout -- so the loop wakes
+        up in time to flush even with no new controller input, but
+        doesn't busy-loop when nothing is pending."""
+        interval = min_interval()
+        if interval <= 0.0:
+            return 1.0
+        now = time.monotonic()
+        waits = [
+            max(0.0, last_sent_time[s] + interval - now)
+            for s in ("left", "right") if pending[s] is not None
+        ]
+        return min(waits) if waits else 1.0
 
     try:
         while True:
@@ -669,7 +755,11 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
                     uin.syn()
                 cfg = watcher.cfg  # pick up rescan_interval/device_name_match etc. too
 
-            r, _, _ = select.select([src.fd], [], [], 1.0)
+            if flush_pending_sticks():
+                uin.syn()
+
+            select_timeout = min(1.0, next_flush_wait())
+            r, _, _ = select.select([src.fd], [], [], select_timeout)
             if not r:
                 continue
             try:
@@ -732,9 +822,11 @@ def main():
     # signal.signal(signal.SIGINT, handle_term)
 
     p = watcher.profile
-    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f shape=%s, right dz=%.2f adz=%.2f shape=%s)",
+    max_hz = watcher.cfg.get("max_output_hz", 0)
+    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f shape=%s, right dz=%.2f adz=%.2f shape=%s, max_output_hz=%s)",
               watcher.profile_name, p["left"]["deadzone"], p["left"]["anti_deadzone"], p["left"]["deadzone_shape"],
-              p["right"]["deadzone"], p["right"]["anti_deadzone"], p["right"]["deadzone_shape"])
+              p["right"]["deadzone"], p["right"]["anti_deadzone"], p["right"]["deadzone_shape"],
+              max_hz if max_hz else "unlimited")
 
     while running:
         try:

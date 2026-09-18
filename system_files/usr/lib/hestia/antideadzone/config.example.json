@@ -175,5 +175,7 @@
   "reload_interval": 1.0,
   "_reload_interval_help": "Seconds between checks of this file's last-modified time. Lower = more responsive profile switches, higher = very slightly less overhead. 1 second is already fast enough to switch mid-game between menu screens.",
   "debug_sample_rate": 5,
-  "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables."
+  "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables.",
+  "max_output_hz": 0,
+  "_max_output_hz_help": "Caps how often stick ABS events are sent to the virtual device, in Hz. 0 (default) = unlimited, send every shaped value as fast as the source controller reports it. Useful under Proton with a high polling rate controller (500/1000Hz) if XInput emulation buffers/lags on very frequent input -- try 250, which matches a real Xbox 360 controller. Only throttles stick axes; buttons/triggers/dpad are always sent immediately, and the most recent stick value is always eventually sent, never dropped outright."
 }
