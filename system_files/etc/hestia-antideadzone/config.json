@@ -29,7 +29,7 @@
         "deadzone_shape": "radial",
         "deadzone": 0.01,
         "anti_deadzone": 0.25,
-        "curve": 2.0
+        "curve": 1.0
       }
     },
     "radial": {
@@ -43,7 +43,7 @@
         "deadzone_shape": "radial",
         "deadzone": 0.01,
         "anti_deadzone": 0.25,
-        "curve": 2.0
+        "curve": 1.0
       }
     },
     "axial": {
@@ -59,7 +59,7 @@
         "deadzone_shape": "sloped_axial",
         "deadzone": 0.01,
         "anti_deadzone": 0.25,
-        "curve": 2.0
+        "curve": 1.0
       }
     },
     "10": {
@@ -135,7 +135,7 @@
         "deadzone_shape": "sloped_axial",
         "deadzone": 0.01,
         "anti_deadzone": 0.25,
-        "curve": 2.0
+        "curve": 1.6
       }
     },
     "26": {
@@ -169,7 +169,11 @@
       }
     }
   },
+  "_profile_help": "Each of 'left'/'right' has its own settings, so the two sticks can differ. deadzone: 0-1, input ignored near center. anti_deadzone: 0-1, output floor the instant the stick leaves the deadzone -- defeats a game's own internal deadzone. curve: 1.0 linear, >1.0 more precision near center, <1.0 twitchier near center; no effect on '_unscaled' shapes. deadzone_shape: 'radial' (default -- circular, no jump, diagonals stay smooth); 'radial_unscaled' (same circle, jumps to raw magnitude at the boundary instead of ramping); 'axial' (flat per-axis deadzone -- matches games with their own per-axis deadzone, but distorts angle near the edge and needs more push at an angle than straight-on); 'axial_unscaled' (same, jumps at the boundary); 'sloped_axial' (per-axis deadzone that shrinks as the other axis nears 0 -- softens axial's angle distortion and threshold mismatch); 'sloped_axial_unscaled' (same, jumps at the boundary); 'hybrid' (radial first to smooth center noise, then sloped_axial on top for axis precision). sloped_dominance_curve (0.0-2.0+, default 1.0, only affects sloped_axial/sloped_axial_unscaled/hybrid): how much of anti_deadzone reaches the smaller axis. 1.0 = scaled down by how small that axis is (clean single-axis pushes, weaker diagonal boost). 0.0 = full floor the instant its own threshold is crossed (strong diagonal boost, but ordinary noise on the off-axis can snap it toward 45 degrees). Tune to taste.",
   "rescan_interval": 1.0,
+  "_rescan_interval_help": "Seconds between reconnect attempts while no matching controller is found. Each attempt just opens the /dev/input/event* nodes and reads capabilities -- a few ms of local syscalls -- so 1s or even lower isn't a meaningful CPU cost.",
   "reload_interval": 1.0,
-  "debug_sample_rate": 5
+  "_reload_interval_help": "Seconds between checks of this file's last-modified time. Lower = more responsive profile switches, higher = very slightly less overhead. 1 second is already fast enough to switch mid-game between menu screens.",
+  "debug_sample_rate": 5,
+  "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables."
 }
