@@ -20,32 +20,8 @@ wait_for() {
 }
 
 find_graphical_user() {
-    local session
-    local type
-    local state
-    local remote
-    local user
-
-    while read -r session _; do
-        type=$(loginctl show-session "$session" -p Type --value 2>/dev/null)
-        state=$(loginctl show-session "$session" -p State --value 2>/dev/null)
-        remote=$(loginctl show-session "$session" -p Remote --value 2>/dev/null)
-
-        if [[ "$state" != "active" || "$remote" != "no" ]]; then
-            continue
-        fi
-
-        if [[ "$type" == "wayland" || "$type" == "x11" ]]; then
-            user=$(loginctl show-session "$session" -p User --value 2>/dev/null)
-
-            if [[ -n "$user" ]]; then
-                printf '%s\n' "$user"
-                return 0
-            fi
-        fi
-    done < <(loginctl list-sessions --no-legend --no-pager 2>/dev/null)
-
-    return 1
+    loginctl list-sessions --no-legend --no-pager |
+        awk '$4 == "seat0" { print $2; exit }'
 }
 
 has_dmem_controller() {
