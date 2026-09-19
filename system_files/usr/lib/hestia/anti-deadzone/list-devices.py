@@ -2,7 +2,7 @@
 """
 list-devices.py — show all evdev input devices and flag which ones
 look like gamepads, to help pick `device_name_match` for
-hestia-antideadzone's config.
+hestia anti-deadzone's config.
 
 Run this with your controller plugged in.
 """

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+PROFILE="${1:-default}"
+
+python3 /usr/lib/hestia/anti-deadzone/switch-profile.py "$PROFILE"

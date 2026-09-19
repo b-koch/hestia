@@ -16,8 +16,8 @@ input device, instead of repeatedly re-scanning /dev/input on a
 timer. Meant to be run under systemd as a user service (see
 antideadzone.service).
 
-Config: /etc/hestia-antideadzone/config.json or
-        ~/.config/hestia-antideadzone/config.json (JSON)
+Config: /etc/hestia/anti-deadzone/config.json or
+        ~/.config/hestia/anti-deadzone/config.json (JSON)
 
 The config supports named PROFILES (e.g. "off", "default", a
 per-game preset) plus an "active_profile" key selecting which one
@@ -50,8 +50,8 @@ logging.basicConfig(
 log = logging.getLogger("antideadzone")
 
 CONFIG_PATHS = [
-    os.path.expanduser("~/.config/hestia-antideadzone/config.json"),
-    "/etc/hestia-antideadzone/config.json",
+    os.path.expanduser("~/.config/hestia/anti-deadzone/config.json"),
+    "/etc/hestia/anti-deadzone/config.json",
 ]
 
 DEFAULT_PROFILE = {
@@ -181,6 +181,25 @@ def active_profile(cfg):
                         name, stick, field_name, val, fallback,
                     )
                     scfg[field_name] = fallback
+
+    # max_output_hz is profile-level (applies to both sticks
+    # together, not per-stick), and optional -- a profile that
+    # doesn't set it falls back to the config-wide value at the call
+    # site (see min_interval()), so it's left out of `merged`
+    # entirely here unless the profile itself set it. Only coerce it
+    # if present, same reasoning as the per-stick fields above.
+    if "max_output_hz" in merged:
+        val = merged["max_output_hz"]
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            try:
+                merged["max_output_hz"] = float(val)
+            except (TypeError, ValueError):
+                log.warning(
+                    "profile '%s': max_output_hz=%r is not a number, ignoring (falling back to config-wide value)",
+                    name, val,
+                )
+                del merged["max_output_hz"]
+
     return name, merged
 
 
@@ -674,8 +693,12 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
     last_sent_time = {"left": 0.0, "right": 0.0}
     pending = {"left": None, "right": None}
 
-    def min_interval():
-        hz = cfg.get("max_output_hz", 0)
+    def min_interval(profile):
+        """Per-profile max_output_hz overrides the config-wide value
+        when the active profile sets one; otherwise falls back to
+        cfg's top-level max_output_hz. 0/unset on both means no
+        limiting."""
+        hz = profile.get("max_output_hz", cfg.get("max_output_hz", 0))
         if isinstance(hz, bool) or not isinstance(hz, (int, float)):
             try:
                 hz = float(hz)
@@ -689,7 +712,7 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
         passed since the last write for this stick) or stash it in
         `pending` to be flushed later by flush_pending_sticks()."""
         x, y, out_x, out_y = shape_stick(stick, profile)
-        interval = min_interval()
+        interval = min_interval(profile)
         now = time.monotonic()
         if interval <= 0.0 or (now - last_sent_time[stick]) >= interval:
             write_stick(stick, out_x, out_y)
@@ -704,14 +727,14 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
         uin.write(ecodes.EV_ABS, ax_x, out_x)
         uin.write(ecodes.EV_ABS, ax_y, out_y)
 
-    def flush_pending_sticks():
+    def flush_pending_sticks(profile):
         """Write out any stick whose throttle window has elapsed
         since it was last stashed in `pending`. Called every loop
         iteration (including on the select() timeout) so a value
         that's just being held steady -- not re-triggered by new
         stick movement -- still goes out promptly instead of waiting
         indefinitely for the next physical event."""
-        interval = min_interval()
+        interval = min_interval(profile)
         if interval <= 0.0:
             return False
         now = time.monotonic()
@@ -725,12 +748,12 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
                 wrote = True
         return wrote
 
-    def next_flush_wait():
+    def next_flush_wait(profile):
         """Seconds until the earliest pending stick's throttle window
         elapses, for sizing the select() timeout -- so the loop wakes
         up in time to flush even with no new controller input, but
         doesn't busy-loop when nothing is pending."""
-        interval = min_interval()
+        interval = min_interval(profile)
         if interval <= 0.0:
             return 1.0
         now = time.monotonic()
@@ -755,10 +778,10 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag):
                     uin.syn()
                 cfg = watcher.cfg  # pick up rescan_interval/device_name_match etc. too
 
-            if flush_pending_sticks():
+            if flush_pending_sticks(watcher.profile):
                 uin.syn()
 
-            select_timeout = min(1.0, next_flush_wait())
+            select_timeout = min(1.0, next_flush_wait(watcher.profile))
             r, _, _ = select.select([src.fd], [], [], select_timeout)
             if not r:
                 continue
@@ -822,11 +845,12 @@ def main():
     # signal.signal(signal.SIGINT, handle_term)
 
     p = watcher.profile
-    max_hz = watcher.cfg.get("max_output_hz", 0)
-    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f shape=%s, right dz=%.2f adz=%.2f shape=%s, max_output_hz=%s)",
+    effective_hz = p.get("max_output_hz", watcher.cfg.get("max_output_hz", 0))
+    hz_source = "profile override" if "max_output_hz" in p else "config-wide"
+    log.info("antideadzone starting (profile='%s' left dz=%.2f adz=%.2f shape=%s, right dz=%.2f adz=%.2f shape=%s, max_output_hz=%s [%s])",
               watcher.profile_name, p["left"]["deadzone"], p["left"]["anti_deadzone"], p["left"]["deadzone_shape"],
               p["right"]["deadzone"], p["right"]["anti_deadzone"], p["right"]["deadzone_shape"],
-              max_hz if max_hz else "unlimited")
+              effective_hz if effective_hz else "unlimited", hz_source)
 
     while running:
         try:

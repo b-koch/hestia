@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-switch-profile.py — flip hestia-antideadzone's active profile without
+switch-profile.py — flip hestia anti-deadzone's active profile without
 hand-editing JSON.
 
 Usage:
@@ -17,8 +17,8 @@ import os
 import sys
 
 CONFIG_PATHS = [
-    os.path.expanduser("~/.config/hestia-antideadzone/config.json"),
-    "/etc/hestia-antideadzone/config.json",
+    os.path.expanduser("~/.config/hestia/anti-deadzone/config.json"),
+    "/etc/hestia/anti-deadzone/config.json",
 ]
 
 

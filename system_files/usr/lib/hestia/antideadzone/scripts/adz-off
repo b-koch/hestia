@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-adz-switch default
-pkill -9 -f "python3 /usr/lib/hestia/antideadzone/antideadzone.py"
-
-exec "$@"

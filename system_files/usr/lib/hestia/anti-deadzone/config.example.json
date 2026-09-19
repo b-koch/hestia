@@ -1,8 +1,8 @@
 {
-  "_comment": "Copy this to ~/.config/hestia-antideadzone/config.json and edit. JSON has no comments, so any '_xxx_help' key is documentation only and is ignored by the daemon.",
+  "_comment": "Copy this to ~/.config/hestia/anti-deadzone/config.json and edit. JSON has no comments, so any '_xxx_help' key is documentation only and is ignored by the daemon.",
   "device_name_match": "",
   "_device_name_match_help": "Case-insensitive substring to pick your pad if you have multiple input devices (e.g. 'Xbox', 'DualSense', '8BitDo'). Leave empty to auto-pick the first thing that looks like a gamepad. Run list-devices.py to see exact names.",
-  "active_profile": "hogwarts",
+  "active_profile": "off",
   "profiles": {
     "off": {
       "left": {
@@ -61,6 +61,40 @@
         "anti_deadzone": 0.25,
         "curve": 1.0
       }
+    },
+    "dune": {
+      "left": {
+        "sloped_dominance_curve": 1.0,
+        "deadzone_shape": "radial",
+        "deadzone": 0.03,
+        "anti_deadzone": 0.2,
+        "curve": 1.0
+      },
+      "right": {
+        "sloped_dominance_curve": 0.0,
+        "deadzone_shape": "radial",
+        "deadzone": 0.01,
+        "anti_deadzone": 0.2,
+        "curve": 1.0
+      },
+      "max_output_hz": 250
+    },
+    "hogwarts": {
+      "left": {
+        "sloped_dominance_curve": 1.0,
+        "deadzone_shape": "sloped_axial",
+        "deadzone": 0.05,
+        "anti_deadzone": 0.25,
+        "curve": 1.0
+      },
+      "right": {
+        "sloped_dominance_curve": 0.0,
+        "deadzone_shape": "sloped_axial",
+        "deadzone": 0.01,
+        "anti_deadzone": 0.25,
+        "curve": 1.6
+      },
+      "max_output_hz": 250
     },
     "10": {
       "left": {
@@ -122,22 +156,6 @@
         "anti_deadzone": 0.25
       }
     },
-    "hogwarts": {
-      "left": {
-        "sloped_dominance_curve": 1.0,
-        "deadzone_shape": "sloped_axial",
-        "deadzone": 0.05,
-        "anti_deadzone": 0.25,
-        "curve": 1.0
-      },
-      "right": {
-        "sloped_dominance_curve": 0.0,
-        "deadzone_shape": "sloped_axial",
-        "deadzone": 0.01,
-        "anti_deadzone": 0.25,
-        "curve": 1.6
-      }
-    },
     "26": {
       "left": {
         "deadzone": 0.03,
@@ -176,6 +194,6 @@
   "_reload_interval_help": "Seconds between checks of this file's last-modified time. Lower = more responsive profile switches, higher = very slightly less overhead. 1 second is already fast enough to switch mid-game between menu screens.",
   "debug_sample_rate": 5,
   "_debug_sample_rate_help": "Set to e.g. 30 to log every 30th stick event at DEBUG level for tuning. 0 disables.",
-  "max_output_hz": 0,
-  "_max_output_hz_help": "Caps how often stick ABS events are sent to the virtual device, in Hz. 0 (default) = unlimited, send every shaped value as fast as the source controller reports it. Useful under Proton with a high polling rate controller (500/1000Hz) if XInput emulation buffers/lags on very frequent input -- try 250, which matches a real Xbox 360 controller. Only throttles stick axes; buttons/triggers/dpad are always sent immediately, and the most recent stick value is always eventually sent, never dropped outright."
+  "max_output_hz": 500,
+  "_max_output_hz_help": "Caps how often stick ABS events are sent to the virtual device, in Hz. 0 (default) = unlimited, send every shaped value as fast as the source controller reports it. Useful under Proton with a high polling rate controller (500/1000Hz) if XInput emulation buffers/lags on very frequent input -- try 250, which matches a real Xbox 360 controller. Only throttles stick axes; buttons/triggers/dpad are always sent immediately, and the most recent stick value is always eventually sent, never dropped outright. Can also be set inside an individual profile (alongside its \"left\"/\"right\" keys, not inside them) to override this config-wide value just for that profile."
 }

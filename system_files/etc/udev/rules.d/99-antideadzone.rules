@@ -1,0 +1,5 @@
+# /etc/udev/rules.d/99-antideadzone.rules
+#
+# Let members of the `input` group create/write /dev/uinput without
+# running the daemon as root.
+KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"
