@@ -4,5 +4,5 @@ After=user@%i.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/lib/hestia/vram-fix/set-dmem-appslice-limit %i
+ExecStart=/usr/lib/hestia/vram-fix/set-dmem-appslice-limit.sh %i
 RemainAfterExit=yes
