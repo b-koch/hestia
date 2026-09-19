@@ -4,6 +4,9 @@ set -euo pipefail
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
 
+echo "Ensuring shell scripts are executable..."
+find /usr/lib/hestia -type f -name '*.sh' -exec chmod +x {} +
+
 echo "Adding repositories..."
 /ctx/scripts/add_repos.sh
 
