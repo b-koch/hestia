@@ -19,27 +19,17 @@ wait_for() {
     return 1
 }
 
-find_graphical_user() {
-    loginctl list-sessions --no-legend --no-pager |
-        awk '$4 == "seat0" { print $2; exit }'
-}
+USER_ID=${1:?usage: $0 UID}
 
-has_dmem_controller() {
-    grep -qw dmem "$1/cgroup.controllers"
-}
-
-enable_dmem_controller() {
+ensure_dmem_enabled() {
     local cgroup=$1
 
-    if grep -qw dmem "$cgroup/cgroup.subtree_control" 2>/dev/null; then
-        return 0
-    fi
+    grep -qw dmem "$cgroup/cgroup.controllers" || return 1
+    grep -qw dmem "$cgroup/cgroup.subtree_control" 2>/dev/null && return 0
 
     printf '+dmem\n' > "$cgroup/cgroup.subtree_control" 2>/dev/null || true
     grep -qw dmem "$cgroup/cgroup.subtree_control" 2>/dev/null
 }
-
-USER_ID=$(wait_for "graphical user session" find_graphical_user) || exit 1
 
 USER_CGROUP="/sys/fs/cgroup/user.slice/user-${USER_ID}.slice/user@${USER_ID}.service"
 APP_CGROUP="$USER_CGROUP/app.slice"
@@ -47,11 +37,8 @@ APP_CGROUP="$USER_CGROUP/app.slice"
 wait_for "user cgroup" test -d "$USER_CGROUP" || exit 1
 wait_for "app.slice" test -d "$APP_CGROUP" || exit 1
 
-wait_for "dmem controller" has_dmem_controller "$USER_CGROUP" || exit 1
-wait_for "dmem controller to be enabled" enable_dmem_controller "$USER_CGROUP" || exit 1
-
-wait_for "dmem controller on app.slice" has_dmem_controller "$APP_CGROUP" || exit 1
-wait_for "dmem controller on app.slice to be enabled" enable_dmem_controller "$APP_CGROUP" || exit 1
+wait_for "dmem controller enabled" ensure_dmem_enabled "$USER_CGROUP" || exit 1
+wait_for "dmem controller enabled on app.slice" ensure_dmem_enabled "$APP_CGROUP" || exit 1
 
 wait_for "app.slice dmem.max" test -f "$APP_CGROUP/dmem.max" || exit 1
 wait_for "app.slice dmem.current" test -f "$APP_CGROUP/dmem.current" || exit 1
