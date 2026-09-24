@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 
-if ! grep -q "plugdev" /etc/group; then
-            sudo bash -c 'grep "plugdev" /lib/group >> /etc/group'
-        fi
-        sudo usermod -a -G plugdev "$USER"
+# if ! grep -q "plugdev" /etc/group; then
+#     sudo bash -c 'grep "plugdev" /lib/group >> /etc/group'
+# fi
+# sudo usermod -a -G plugdev "$USER"
 
 # Get the directory where this script is located
 BASE_DIR=$(dirname "$(readlink -f "$0")")
-
-# Just wait 5 seconds for the system/daemon to settle
-sleep 0.5
 
 # Ensure only one instance is running
 pkill -f razer_battery_tray.py
