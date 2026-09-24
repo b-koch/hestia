@@ -10,7 +10,7 @@ pkill -f razer_battery_tray.py
 cd "$BASE_DIR/src"
 
 # Launch the app
-nohup python3 ./razer_battery_tray.py &
+python3 ./razer_battery_tray.py &
 
 sleep 2
 /usr/bin/reload-appindicator.sh
