@@ -20,3 +20,4 @@ binaries/
 /docs/*/
 # Local EROFS sysext build output
 /sysext/dist/
+__pycache__/
