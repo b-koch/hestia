@@ -542,8 +542,8 @@ def build_uinput(source: InputDevice) -> UInput:
     if abs_caps:
         caps[ecodes.EV_ABS] = abs_caps
 
-    uin = UInput(caps, name="antideadzone virtual gamepad", vendor=0x045e,
-                 product=0x028e, version=1)
+    uin = UInput(caps, name="Xbox Wireless Controller", vendor=0x045e,
+                 product=0x02ff, version=1)
     return uin
 
 
