@@ -86,3 +86,84 @@ hestia-remove-orphaned-prefixes:
 hestia-fix-startup-notify:
     #!/usr/bin/env bash
     /usr/lib/hestia/fix-startup-notify.sh
+
+# Apply Samsung Odyssey G5 EDID fix to prevent AMD GPUs from being stuck at the lowest vram clock.
+# The DisplayPort connector is detected automatically (matched by the monitor's EDID vendor/product ID).
+# To skip detection, pass the port: ujust hestia-fix-edid DP-1
+[group("hestia")]
+hestia-fix-edid port="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    EDID="edid/samsung-odyssey-g5-2560x1440-159hz-mclkfix.bin"
+    PORT="{{ port }}"
+    ODYSSEY_ID="4c2da774"   # EDID bytes 8-11: Samsung (SAM) + product 0x74A7
+
+    if [[ ! -f "/usr/lib/firmware/$EDID" ]]; then
+        echo "ERROR: /usr/lib/firmware/$EDID is missing from this image." >&2
+        exit 1
+    fi
+
+    # Collect connected DisplayPort connectors (name without the "cardN-" prefix)
+    # and the subset whose EDID identifies the Odyssey G5.
+    connected=()
+    matches=()
+    for dir in /sys/class/drm/card*-DP-*; do
+        [[ -e "$dir/status" ]] || continue
+        [[ "$(cat "$dir/status")" == "connected" ]] || continue
+        name="${dir##*/}"
+        name="${name#card*-}"
+        connected+=("$name")
+        id="$(od -An -tx1 -j8 -N4 -v "$dir/edid" 2>/dev/null | tr -d ' \n' || true)"
+        if [[ "$id" == "$ODYSSEY_ID" ]]; then
+            matches+=("$name")
+        fi
+    done
+    uniq_sorted() { if [[ $# -gt 0 ]]; then printf '%s\n' "$@" | sort -u; fi; }
+    mapfile -t connected < <(uniq_sorted "${connected[@]}")
+    mapfile -t matches < <(uniq_sorted "${matches[@]}")
+
+    ports=()
+    if [[ -n "$PORT" ]]; then
+        ports=("$PORT")
+    elif [[ ${#matches[@]} -gt 0 ]]; then
+        ports=("${matches[@]}")
+        echo "Odyssey G5 detected on: ${ports[*]}"
+    elif [[ ${#connected[@]} -gt 0 ]]; then
+        echo "Odyssey G5 not detected. Connected DisplayPort connectors:"
+        PS3="Select the port to fix: "
+        select choice in "${connected[@]}"; do
+            if [[ -n "$choice" ]]; then
+                ports=("$choice")
+                break
+            fi
+        done
+    else
+        echo "ERROR: no connected DisplayPort connector found." >&2
+        echo "Plug in the monitor, or pass the port explicitly: ujust hestia-fix-edid DP-1" >&2
+        exit 1
+    fi
+    if [[ ${#ports[@]} -eq 0 ]]; then
+        echo "No port selected, nothing changed." >&2
+        exit 1
+    fi
+
+    value=""
+    for p in "${ports[@]}"; do
+        value+="${value:+,}$p:$EDID"
+    done
+
+    # Remove earlier entries for this file so switching ports does not stack kargs.
+    delete_args=()
+    for karg in $(sudo rpm-ostree kargs); do
+        if [[ "$karg" == drm.edid_firmware=*"$EDID"* ]]; then
+            delete_args+=(--delete-if-present="$karg")
+        fi
+    done
+
+    sudo rpm-ostree kargs "${delete_args[@]}" --append-if-missing="drm.edid_firmware=$value"
+    echo
+    echo "Applied drm.edid_firmware=$value"
+    echo "Reboot to activate it, then verify with:"
+    echo "  sha256sum /sys/class/drm/card*-DP-*/edid /usr/lib/firmware/$EDID"
+
