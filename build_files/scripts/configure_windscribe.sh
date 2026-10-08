@@ -2,4 +2,4 @@
 
 chgrp windscribe /opt/windscribe/Windscribe
 chmod g+s /opt/windscribe/Windscribe
-echo 'g windscribe 350' > /usr/lib/sysusers.d/windscribe.conf
+echo 'u windscribe 350:350 "Windscribe VPN" - /usr/sbin/nologin' > /usr/lib/sysusers.d/windscribe.conf
