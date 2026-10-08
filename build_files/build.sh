@@ -37,6 +37,7 @@ echo "Adding Bitwarden Policy to Polkit"
 echo "Applying configurations..."
 /ctx/scripts/remove_gnome_extensions.sh
 /ctx/scripts/configure_gnome_extensions.sh
+/ctx/scripts/configure_windscribe.sh
 /ctx/scripts/configure.sh # should be the last configuration script to be run
 
 echo "Adding Hestia branding..."
