@@ -6,6 +6,8 @@ latest_url=$(curl -fsSL -o /dev/null -w "%{url_effective}" https://github.com/Wi
 tag="${latest_url##*/}"
 version="${tag#v}"
 
-groupadd -r -g 960 windscribe
+
+
+groupadd -r -g 350 windscribe
 
 echo "https://github.com/Windscribe/Desktop-App/releases/download/${tag}/windscribe_${version}_amd64_fedora.rpm"
