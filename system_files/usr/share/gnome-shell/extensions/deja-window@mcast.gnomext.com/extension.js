@@ -288,11 +288,20 @@ export default class DejaWindowExtension extends Extension {
             // Check validity before accessing props
             if (!window || !window.get_workspace()) continue;
 
-            if (!this._getEffectiveConfig(window)) {
-                debug(`[DejaWindow] No longer managing: ${window.get_wm_class()} / ${window.get_title()}`);
-                this._cleanupWindow(window);
-            }
+            this._releaseIfIneligible(window);
         }
+    }
+
+    // Stops managing a window that no longer qualifies: its config is gone, or it
+    // changed type after creation. Desktop shells such as DING map their windows as
+    // NORMAL and turn them into DESKTOP/DOCK right after; restoring 'above' there
+    // would lift a desktop surface over every application window.
+    _releaseIfIneligible(window) {
+        if (this._isValidManagedWindow(window) && this._getEffectiveConfig(window)) return false;
+
+        debug(`[DejaWindow] No longer managing: ${window.get_wm_class()} / ${window.get_title()}`);
+        this._cleanupWindow(window);
+        return true;
     }
 
     // Adopts any currently open, not-yet-managed windows. Used when Global
@@ -742,6 +751,7 @@ export default class DejaWindowExtension extends Extension {
         window.connectObject('notify::minimized', () => handleWindowChange(window), this);
         window.connectObject('notify::above', () => handleWindowChange(window), this);
         window.connectObject('notify::on-all-workspaces', () => handleWindowChange(window), this);
+        window.connectObject('notify::window-type', () => this._releaseIfIneligible(window), this);
     }
 
     // Applies the saved size and/or position, or falls back to centering if position is invalid/not requested.
@@ -773,6 +783,9 @@ export default class DejaWindowExtension extends Extension {
                 debug(`[DejaWindow] Window ${identity} actor not ready in idle, skipping...`);
                 return GLib.SOURCE_REMOVE;
             }
+
+            // The window may have changed type since the restore was scheduled.
+            if (this._releaseIfIneligible(window)) return GLib.SOURCE_REMOVE;
 
             handle.isRestoreApplied = true;
 
