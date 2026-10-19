@@ -110,7 +110,7 @@ let ClipboardIndicator = class ClipboardIndicator extends PanelMenu.Button {
 
 	configurePanelMenuClickGesture() {
 		if (VERSION < 50) return;
-		this._clickGesture?.set_required_button(Clutter.BUTTON_SECONDARY);
+		this._clickGesture.set_required_button(Clutter.BUTTON_SECONDARY);
 	}
 
 	get incognito() {
