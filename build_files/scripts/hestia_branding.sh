@@ -4,146 +4,146 @@ set -euo pipefail
 echo "Restoring stock Fedora logos/icons/plymouth watermark..."
 dnf5 reinstall -y fedora-logos
 
-echo "Removing unreferenced Bazzite-only logo assets..."
-rm -f /usr/share/icons/hicolor/scalable/places/bazzite-logo-le.svg
-for size in 16x16 22x22 24x24 32x32 36x36 48x48 96x96 256x256; do
-    rm -f "/usr/share/icons/hicolor/${size}/bazzite-logo-icon.png"
-done
+# echo "Removing unreferenced Bazzite-only logo assets..."
+# rm -f /usr/share/icons/hicolor/scalable/places/bazzite-logo-le.svg
+# for size in 16x16 22x22 24x24 32x32 36x36 48x48 96x96 256x256; do
+#     rm -f "/usr/share/icons/hicolor/${size}/bazzite-logo-icon.png"
+# done
 
-echo "Rewriting /usr/lib/os-release for Hestia..."
-sed -i \
-  -e 's/^ID=.*/ID=hestia/' \
-  -e 's/^VARIANT_ID=.*/VARIANT_ID=hestia/' \
-  -e 's/^PRETTY_NAME=.*/PRETTY_NAME="Hestia"/' \
-  -e 's/^NAME=.*/NAME="Hestia"/' \
-  -e 's/^DEFAULT_HOSTNAME=.*/DEFAULT_HOSTNAME="hestia"/' \
-  -e 's/^LOGO=.*/LOGO=fedora-logo-icon/' \
-  -e 's|^HOME_URL=.*|HOME_URL="https://github.com/b-koch/hestia"|' \
-  -e 's|^DOCUMENTATION_URL=.*|DOCUMENTATION_URL="https://github.com/b-koch/hestia#readme"|' \
-  -e 's|^SUPPORT_URL=.*|SUPPORT_URL="https://github.com/b-koch/hestia/discussions"|' \
-  -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://github.com/b-koch/hestia/issues"|' \
-  -e 's|^CPE_NAME="cpe:/o:universal-blue:bazzite|CPE_NAME="cpe:/o:b-koch:hestia|' \
-  -e 's/^BOOTLOADER_NAME=.*/BOOTLOADER_NAME="Hestia"/' \
-  /usr/lib/os-release
+# echo "Rewriting /usr/lib/os-release for Hestia..."
+# sed -i \
+#   -e 's/^ID=.*/ID=hestia/' \
+#   -e 's/^VARIANT_ID=.*/VARIANT_ID=hestia/' \
+#   -e 's/^PRETTY_NAME=.*/PRETTY_NAME="Hestia"/' \
+#   -e 's/^NAME=.*/NAME="Hestia"/' \
+#   -e 's/^DEFAULT_HOSTNAME=.*/DEFAULT_HOSTNAME="hestia"/' \
+#   -e 's/^LOGO=.*/LOGO=fedora-logo-icon/' \
+#   -e 's|^HOME_URL=.*|HOME_URL="https://github.com/b-koch/hestia"|' \
+#   -e 's|^DOCUMENTATION_URL=.*|DOCUMENTATION_URL="https://github.com/b-koch/hestia#readme"|' \
+#   -e 's|^SUPPORT_URL=.*|SUPPORT_URL="https://github.com/b-koch/hestia/discussions"|' \
+#   -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://github.com/b-koch/hestia/issues"|' \
+#   -e 's|^CPE_NAME="cpe:/o:universal-blue:bazzite|CPE_NAME="cpe:/o:b-koch:hestia|' \
+#   -e 's/^BOOTLOADER_NAME=.*/BOOTLOADER_NAME="Hestia"/' \
+#   /usr/lib/os-release
 
-echo "Fixing /etc/system-release..."
-sed -i 's/Bazzite/Hestia/g' /etc/system-release
+# echo "Fixing /etc/system-release..."
+# sed -i 's/Bazzite/Hestia/g' /etc/system-release
 
-echo "Catching any remaining literal Bazzite/bazzite references (BUILD_ID, IMAGE_ID, etc.)..."
-sed -i \
-  -e 's/Bazzite/Hestia/g' \
-  -e 's/bazzite/hestia/g' \
-  /usr/lib/os-release
+# echo "Catching any remaining literal Bazzite/bazzite references (BUILD_ID, IMAGE_ID, etc.)..."
+# sed -i \
+#   -e 's/Bazzite/Hestia/g' \
+#   -e 's/bazzite/hestia/g' \
+#   /usr/lib/os-release
 
-echo "Pointing fastfetch at its built-in Fedora logo instead of Bazzite's ASCII art..."
+# echo "Pointing fastfetch at its built-in Fedora logo instead of Bazzite's ASCII art..."
 
-cat > /usr/share/ublue-os/bazzite/fastfetch.jsonc <<'HESTIA_FASTFETCH_EOF'
-{
-    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
-    "logo": {
-        "type": "builtin",
-        "source": "Fedora"
-    },
-    "display": {
-        "separator": "  ",
-        "color": {
-            "keys": "light_blue"
-        }
-    },
-    "modules": [
-        {
-            "type": "title",
-            "key": " ",
-            "color": {
-                "user": "light_blue",
-                "at": "white",
-                "host": "magenta"
-            }
-        },
-        "break",
-        {
-            "type": "command",
-            "key": " 󱋩",
-            "text": "/usr/libexec/bazzite-fetch-image"
-        },
-        {
-            "type": "os",
-            "key": " 󰣛",
-            "format": "{pretty-name}"
-        },
-        {
-            "type": "kernel",
-            "key": " ",
-            "format": "{1} {2}"
-        },
-        {
-            "type": "uptime",
-            "key": " 󰅐"
-        },
-        "break",
-        {
-            "type": "host",
-            "key": " 󰾰"
-        },
-        {
-            "type": "cpu",
-            "key": " 󰻠"
-        },
-        {
-            "type": "gpu",
-            "key": " 󰍛"
-        },
-        {
-            "type": "memory",
-            "key": " "
-        },
-        {
-            "type": "disk",
-            "key": " ",
-            "hideFS": "overlay"
-        },
-        {
-            "type": "display",
-            "key": " 󰍹"
-        },
-        {
-            "type": "battery",
-            "key": " "
-        },
-        {
-            "type": "gamepad",
-            "key": " 󰖺"
-        },
-        "break",
-        {
-            "type": "de",
-            "key": " 󰕮"
-        },
-        {
-            "type": "wm",
-            "key": " "
-        },
-        {
-            "type": "shell",
-            "key": " "
-        },
-        {
-            "type": "terminal",
-            "key": " "
-        },
-        {
-            "type": "packages",
-            "key": " 󰏖"
-        },
-        "break",
-        {
-            "type": "colors",
-            "paddingLeft": 2,
-            "symbol": "circle"
-        }
-    ]
-}
-HESTIA_FASTFETCH_EOF
+# cat > /usr/share/ublue-os/bazzite/fastfetch.jsonc <<'HESTIA_FASTFETCH_EOF'
+# {
+#     "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+#     "logo": {
+#         "type": "builtin",
+#         "source": "Fedora"
+#     },
+#     "display": {
+#         "separator": "  ",
+#         "color": {
+#             "keys": "light_blue"
+#         }
+#     },
+#     "modules": [
+#         {
+#             "type": "title",
+#             "key": " ",
+#             "color": {
+#                 "user": "light_blue",
+#                 "at": "white",
+#                 "host": "magenta"
+#             }
+#         },
+#         "break",
+#         {
+#             "type": "command",
+#             "key": " 󱋩",
+#             "text": "/usr/libexec/bazzite-fetch-image"
+#         },
+#         {
+#             "type": "os",
+#             "key": " 󰣛",
+#             "format": "{pretty-name}"
+#         },
+#         {
+#             "type": "kernel",
+#             "key": " ",
+#             "format": "{1} {2}"
+#         },
+#         {
+#             "type": "uptime",
+#             "key": " 󰅐"
+#         },
+#         "break",
+#         {
+#             "type": "host",
+#             "key": " 󰾰"
+#         },
+#         {
+#             "type": "cpu",
+#             "key": " 󰻠"
+#         },
+#         {
+#             "type": "gpu",
+#             "key": " 󰍛"
+#         },
+#         {
+#             "type": "memory",
+#             "key": " "
+#         },
+#         {
+#             "type": "disk",
+#             "key": " ",
+#             "hideFS": "overlay"
+#         },
+#         {
+#             "type": "display",
+#             "key": " 󰍹"
+#         },
+#         {
+#             "type": "battery",
+#             "key": " "
+#         },
+#         {
+#             "type": "gamepad",
+#             "key": " 󰖺"
+#         },
+#         "break",
+#         {
+#             "type": "de",
+#             "key": " 󰕮"
+#         },
+#         {
+#             "type": "wm",
+#             "key": " "
+#         },
+#         {
+#             "type": "shell",
+#             "key": " "
+#         },
+#         {
+#             "type": "terminal",
+#             "key": " "
+#         },
+#         {
+#             "type": "packages",
+#             "key": " 󰏖"
+#         },
+#         "break",
+#         {
+#             "type": "colors",
+#             "paddingLeft": 2,
+#             "symbol": "circle"
+#         }
+#     ]
+# }
+# HESTIA_FASTFETCH_EOF
 
 # echo "Checking whether a genuine Fedora default wallpaper is available..."
 # FEDORA_VERSION="$(rpm -E %fedora)"
