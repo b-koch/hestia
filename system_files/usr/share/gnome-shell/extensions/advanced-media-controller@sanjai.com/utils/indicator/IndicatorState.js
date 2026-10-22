@@ -38,9 +38,6 @@ export class IndicatorState {
     this._managerInitialized = false;
     this._initTimeout = null;
     this._safetyLock = false;
-    this._errorCount = 0;
-    this._maxErrors = 10;
-    this._lastErrorTime = 0;
     this._preventLogout = false;
   }
 
@@ -84,39 +81,7 @@ export class IndicatorState {
     if (this._sessionChanging || this._safetyLock || this._preventLogout)
       return;
 
-    const now = Date.now();
-    if (
-      now - this._lastErrorTime < 1000 &&
-      this._errorCount >= this._maxErrors
-    ) {
-      return;
-    }
-
-    try {
-      fn();
-      this._errorCount = 0;
-    } catch (e) {
-      this._errorCount++;
-      this._lastErrorTime = now;
-
-      if (this._errorCount < this._maxErrors) {
-      }
-
-      if (this._errorRecoveryTimeout) {
-        GLib.source_remove(this._errorRecoveryTimeout);
-        this._errorRecoveryTimeout = null;
-      }
-
-      this._errorRecoveryTimeout = GLib.timeout_add(
-        GLib.PRIORITY_LOW,
-        5000,
-        () => {
-          this._errorCount = Math.max(0, this._errorCount - 1);
-          this._errorRecoveryTimeout = null;
-          return GLib.SOURCE_REMOVE;
-        },
-      );
-    }
+    fn();
   }
 
   scheduleOperation(fn, delay = 0) {
@@ -133,11 +98,6 @@ export class IndicatorState {
   }
 
   destroy() {
-    if (this._errorRecoveryTimeout) {
-      GLib.source_remove(this._errorRecoveryTimeout);
-      this._errorRecoveryTimeout = null;
-    }
-
     for (const id of this._pendingOperations) {
       GLib.source_remove(id);
     }

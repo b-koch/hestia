@@ -9,6 +9,7 @@ import Cairo from "cairo";
 import { playerConstant } from "../../utils/ui/playerConstant.js";
 
 const SCROLL_EASING_MS = 240; // snappy but smooth
+const EDGE_FADE_PX = 64;
 const NEIGHBOR_RANGE = 1;
 const COLOR_SCHEME_KEY = "color-scheme";
 
@@ -62,6 +63,7 @@ export const LyricsWidget = GObject.registerClass(
       this._height = height;
       this._settings = settings;
       this._widthChangedId = 0;
+      this._fontChangedId = 0;
 
       this._canvas = new St.DrawingArea({
         style: "padding:0;margin:0;",
@@ -130,6 +132,8 @@ export const LyricsWidget = GObject.registerClass(
         this._interfaceSettings.connectObject(
           `changed::${COLOR_SCHEME_KEY}`,
           () => this._onThemeChanged(),
+          "changed::font-name",
+          () => this._onFontChanged(),
           this,
         );
       }
@@ -147,9 +151,37 @@ export const LyricsWidget = GObject.registerClass(
           "changed::popup-width",
           () => this._onPopupWidthChanged(),
         );
+        this._fontChangedId = this._settings.connect(
+          "changed::lyrics-font-family",
+          () => this._onFontChanged(),
+        );
       }
 
       this._startAnim();
+    }
+
+    _fontFamily() {
+      const custom = this._settings?.get_string("lyrics-font-family").trim();
+      if (custom) return custom;
+
+      const system = this._interfaceSettings?.get_string("font-name");
+      const family = system
+        ? Pango.FontDescription.from_string(system).get_family()
+        : null;
+      return family || "Sans";
+    }
+
+    _font(size, bold) {
+      const desc = new Pango.FontDescription();
+      desc.set_family(this._fontFamily());
+      desc.set_size(size * Pango.SCALE);
+      desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL);
+      return desc;
+    }
+
+    _onFontChanged() {
+      this._invalidateGeometry();
+      this._canvas.queue_repaint();
     }
 
     _onPopupWidthChanged() {
@@ -187,13 +219,7 @@ export const LyricsWidget = GObject.registerClass(
 
     _refreshThemeColors() {
       if (!this.mapped) return;
-      let fg;
-      try {
-        fg = this.get_theme_node().get_foreground_color();
-      } catch (_e) {
-        // theme node not ready yet — happens during early allocation
-        return;
-      }
+      const fg = this.get_theme_node().get_foreground_color();
       const r = fg.red / 255,
         g = fg.green / 255,
         b = fg.blue / 255;
@@ -212,15 +238,8 @@ export const LyricsWidget = GObject.registerClass(
         if (s === "prefer-dark") return true;
         if (s === "prefer-light") return false;
       }
-      try {
-        const fg = this.get_theme_node().get_foreground_color();
-        return (
-          (fg.red * 299 + fg.green * 587 + fg.blue * 114) / (255 * 1000) > 0.5
-        );
-      } catch (_e) {
-        // fallback if node isn't ready — assume dark so text stays visible
-        return true;
-      }
+      const fg = this.get_theme_node().get_foreground_color();
+      return (fg.red * 299 + fg.green * 587 + fg.blue * 114) / (255 * 1000) > 0.5;
     }
 
     _onThemeChanged() {
@@ -478,9 +497,7 @@ export const LyricsWidget = GObject.registerClass(
               ? neighborSize
               : inactiveSize;
 
-          const font = Pango.FontDescription.from_string(
-            `Sans Bold ${fontSize}`,
-          );
+          const font = this._font(fontSize, true);
           layout.set_font_description(font);
           layout.set_text(this._lyrics[i].text, -1);
 
@@ -509,10 +526,11 @@ export const LyricsWidget = GObject.registerClass(
         this._smoothScrollTo(target);
       }
 
-      // Draw lines
       layout.set_width(TEXT_WIDTH * Pango.SCALE);
       layout.set_wrap(Pango.WrapMode.WORD_CHAR);
       layout.set_alignment(Pango.Alignment.CENTER);
+
+      cr.pushGroup();
 
       for (const geo of this._lineGeometries) {
         const y = geo.y - this._scrollOffset;
@@ -530,6 +548,15 @@ export const LyricsWidget = GObject.registerClass(
         cr.moveTo(paddingX, y);
         PangoCairo.show_layout(cr, layout);
       }
+
+      const edge = Math.min(EDGE_FADE_PX, height / 3) / height;
+      const mask = new Cairo.LinearGradient(0, 0, 0, height);
+      mask.addColorStopRGBA(0, 0, 0, 0, 0);
+      mask.addColorStopRGBA(edge, 0, 0, 0, 1);
+      mask.addColorStopRGBA(1 - edge, 0, 0, 0, 1);
+      mask.addColorStopRGBA(1, 0, 0, 0, 0);
+      cr.popGroupToSource();
+      cr.mask(mask);
 
       if (this._fadeAlpha < 1.0) {
         cr.popGroupToSource();
@@ -630,7 +657,7 @@ export const LyricsWidget = GObject.registerClass(
 
       //  Label text
       const layout = PangoCairo.create_layout(cr);
-      layout.set_font_description(Pango.FontDescription.from_string("Sans 10"));
+      layout.set_font_description(this._font(10, false));
       layout.set_width((width - 48) * Pango.SCALE);
       layout.set_alignment(Pango.Alignment.CENTER);
 
@@ -705,11 +732,9 @@ export const LyricsWidget = GObject.registerClass(
       cr.setSourceRGBA(color.r, color.g, color.b, 0.3 * color.a);
       cr.stroke();
 
-      // ── "No lyrics found" text + shimmer ─────────────────────────────────
+      //"No lyrics found" text + shimmer
       const layout = PangoCairo.create_layout(cr);
-      layout.set_font_description(
-        Pango.FontDescription.from_string(`Sans Bold ${fontSize}`),
-      );
+      layout.set_font_description(this._font(fontSize, true));
       layout.set_width((width - paddingX * 2) * Pango.SCALE);
       layout.set_alignment(Pango.Alignment.CENTER);
       layout.set_text("No lyrics found", -1);
@@ -747,9 +772,7 @@ export const LyricsWidget = GObject.registerClass(
 
       // Subtitle
       const sub = PangoCairo.create_layout(cr);
-      sub.set_font_description(
-        Pango.FontDescription.from_string(`Sans ${Math.max(9, fontSize - 3)}`),
-      );
+      sub.set_font_description(this._font(Math.max(9, fontSize - 3), false));
       sub.set_width((width - paddingX * 2) * Pango.SCALE);
       sub.set_alignment(Pango.Alignment.CENTER);
       sub.set_text("Synced lyrics unavailable", -1);
@@ -783,6 +806,10 @@ export const LyricsWidget = GObject.registerClass(
       if (this._widthChangedId && this._settings) {
         this._settings.disconnect(this._widthChangedId);
         this._widthChangedId = 0;
+      }
+      if (this._fontChangedId && this._settings) {
+        this._settings.disconnect(this._fontChangedId);
+        this._fontChangedId = 0;
       }
 
       St.ThemeContext.get_for_stage(global.stage).disconnectObject(this);

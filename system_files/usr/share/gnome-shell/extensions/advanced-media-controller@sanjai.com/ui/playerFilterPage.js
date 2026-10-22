@@ -16,11 +16,7 @@ export function buildPlayerFilterPage(page, settings, findAppInfo) {
   };
 
   page.connect("destroy", () => {
-    for (const id of _connIds) {
-      try {
-        settings.disconnect(id);
-      } catch (_) {}
-    }
+    for (const id of _connIds) settings.disconnect(id);
     _connIds.length = 0;
   });
 
@@ -282,96 +278,99 @@ export function buildPlayerFilterPage(page, settings, findAppInfo) {
       -1,
       null,
       (conn, res) => {
+        let names;
         try {
-          const result = conn.call_finish(res);
-          const names = result.deep_unpack()[0];
-          const mprisNames = names.filter((n) =>
-            n.startsWith("org.mpris.MediaPlayer2."),
+          names = conn.call_finish(res).deep_unpack()[0];
+        } catch (e) {
+          console.warn(`MPRIS scan failed: ${e.message}`);
+          return;
+        }
+        const mprisNames = names.filter((n) =>
+          n.startsWith("org.mpris.MediaPlayer2."),
+        );
+
+        clearLiveRows();
+
+        if (mprisNames.length === 0) {
+          const noneRow = new Adw.ActionRow({
+            title: _("No active players detected"),
+            subtitle: _("Open a music app and click Refresh"),
+            activatable: false,
+          });
+          noneRow.add_prefix(
+            new Gtk.Image({
+              icon_name: "media-playback-stop-symbolic",
+              pixel_size: 24,
+              valign: Gtk.Align.CENTER,
+              opacity: 0.5,
+            }),
+          );
+          liveGroup.add(noneRow);
+          filterLiveRows.push(noneRow);
+          return;
+        }
+
+        const seen = new Set();
+
+        for (const fullBus of mprisNames) {
+          const short = toShort(fullBus);
+          if (seen.has(short)) continue;
+          seen.add(short);
+
+          const appInfo = findAppInfo(short, short);
+          const appIcon = appInfo ? appInfo.get_icon() : null;
+          const displayName = appInfo
+            ? appInfo.get_display_name() || appInfo.get_name() || short
+            : short;
+
+          const row = new Adw.ActionRow({
+            title: displayName,
+            subtitle: fullBus,
+            activatable: false,
+          });
+
+          row.add_prefix(
+            appIcon
+              ? new Gtk.Image({
+                  gicon: appIcon,
+                  pixel_size: 32,
+                  valign: Gtk.Align.CENTER,
+                })
+              : new Gtk.Image({
+                  icon_name: "application-x-executable-symbolic",
+                  pixel_size: 32,
+                  valign: Gtk.Align.CENTER,
+                  opacity: 0.6,
+                }),
           );
 
-          clearLiveRows();
+          const alreadySaved = parseList().some((e) => e.name === short);
 
-          if (mprisNames.length === 0) {
-            const noneRow = new Adw.ActionRow({
-              title: _("No active players detected"),
-              subtitle: _("Open a music app and click Refresh"),
-              activatable: false,
-            });
-            noneRow.add_prefix(
-              new Gtk.Image({
-                icon_name: "media-playback-stop-symbolic",
-                pixel_size: 24,
-                valign: Gtk.Align.CENTER,
-                opacity: 0.5,
-              }),
-            );
-            liveGroup.add(noneRow);
-            filterLiveRows.push(noneRow);
-            return;
-          }
+          const addBtn = new Gtk.Button({
+            label: alreadySaved ? _("Saved \u2713") : _("Add to Filter"),
+            valign: Gtk.Align.CENTER,
+            css_classes: alreadySaved ? ["flat"] : ["suggested-action"],
+            tooltip_text: alreadySaved
+              ? _("\u201c%s\u201d is already in the filter list").format(
+                  short,
+                )
+              : _(
+                  "Add \u201c%s\u201d to the filter list (enabled by default)",
+                ).format(short),
+          });
 
-          const seen = new Set();
+          addBtn.connect("clicked", () => {
+            if (parseList().some((e) => e.name === short)) return;
+            const current = parseList();
+            current.push({ name: short, enabled: true });
+            serializeList(current);
+          });
 
-          for (const fullBus of mprisNames) {
-            const short = toShort(fullBus);
-            if (seen.has(short)) continue;
-            seen.add(short);
-
-            const appInfo = findAppInfo(short, short);
-            const appIcon = appInfo ? appInfo.get_icon() : null;
-            const displayName = appInfo
-              ? appInfo.get_display_name() || appInfo.get_name() || short
-              : short;
-
-            const row = new Adw.ActionRow({
-              title: displayName,
-              subtitle: fullBus,
-              activatable: false,
-            });
-
-            row.add_prefix(
-              appIcon
-                ? new Gtk.Image({
-                    gicon: appIcon,
-                    pixel_size: 32,
-                    valign: Gtk.Align.CENTER,
-                  })
-                : new Gtk.Image({
-                    icon_name: "application-x-executable-symbolic",
-                    pixel_size: 32,
-                    valign: Gtk.Align.CENTER,
-                    opacity: 0.6,
-                  }),
-            );
-
-            const alreadySaved = parseList().some((e) => e.name === short);
-
-            const addBtn = new Gtk.Button({
-              label: alreadySaved ? _("Saved \u2713") : _("Add to Filter"),
-              valign: Gtk.Align.CENTER,
-              css_classes: alreadySaved ? ["flat"] : ["suggested-action"],
-              tooltip_text: alreadySaved
-                ? _("\u201c%s\u201d is already in the filter list").format(
-                    short,
-                  )
-                : _(
-                    "Add \u201c%s\u201d to the filter list (enabled by default)",
-                  ).format(short),
-            });
-
-            addBtn.connect("clicked", () => {
-              if (parseList().some((e) => e.name === short)) return;
-              const current = parseList();
-              current.push({ name: short, enabled: true });
-              serializeList(current);
-            });
-
-            _liveAddBtns.set(short, addBtn);
-            row.add_suffix(addBtn);
-            liveGroup.add(row);
-            filterLiveRows.push(row);
-          }
-        } catch (e) {}
+          _liveAddBtns.set(short, addBtn);
+          row.add_suffix(addBtn);
+          liveGroup.add(row);
+          filterLiveRows.push(row);
+        }
       },
     );
   };

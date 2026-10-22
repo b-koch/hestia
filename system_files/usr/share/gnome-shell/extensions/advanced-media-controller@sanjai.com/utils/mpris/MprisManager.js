@@ -50,21 +50,10 @@ export class MprisManager {
   _shouldIncludePlayer(busName) {
     if (!this._settings) return true;
 
-    let mode;
-    try {
-      mode = this._settings.get_int("player-filter-mode");
-    } catch (_e) {
-      return true;
-    }
+    const mode = this._settings.get_int("player-filter-mode");
+    if (mode === 0) return true;
 
-    if (mode === 0) return true; // Off – allow everything
-
-    let listStr;
-    try {
-      listStr = this._settings.get_string("player-filter-list") || "";
-    } catch (_e) {
-      return true;
-    }
+    const listStr = this._settings.get_string("player-filter-list");
 
     const listed = listStr
       .split(",")
@@ -210,22 +199,24 @@ export class MprisManager {
         MprisConstants.DBUS_TIMEOUT,
         null,
         async (conn, result) => {
+          let names;
           try {
-            const reply = conn.call_finish(result);
-            const [names] = reply.deep_unpack();
-            const players = names.filter(
-              (name) =>
-                name.startsWith(`${MprisConstants.MPRIS_PREFIX}.`) &&
-                this._shouldIncludePlayer(name),
-            );
-
-            for (const name of players) {
-              await this._player.addPlayer(name);
-            }
+            [names] = conn.call_finish(result).deep_unpack();
+          } catch {
             resolve();
-          } catch (e) {
-            resolve();
+            return;
           }
+
+          const players = names.filter(
+            (name) =>
+              name.startsWith(`${MprisConstants.MPRIS_PREFIX}.`) &&
+              this._shouldIncludePlayer(name),
+          );
+
+          for (const name of players) {
+            await this._player.addPlayer(name);
+          }
+          resolve();
         },
       );
     });

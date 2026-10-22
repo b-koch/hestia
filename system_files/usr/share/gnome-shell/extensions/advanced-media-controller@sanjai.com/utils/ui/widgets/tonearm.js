@@ -16,28 +16,8 @@ export const TONEARM_PLAYING_ANGLE = 8;
  * @returns {number}
  */
 function _canvasSize(settings) {
-  if (settings) {
-    try {
-      return Math.max(180, settings.get_int("popup-width"));
-    } catch (_e) {}
-  }
-  return 340;
-}
-
-function _connect(obj, signal, fn) {
-  try {
-    return obj.connect(signal, fn);
-  } catch (_e) {
-    return 0;
-  }
-}
-
-function _disconnect(obj, id) {
-  if (id) {
-    try {
-      obj.disconnect(id);
-    } catch (_e) {}
-  }
+  if (!settings) return 340;
+  return Math.max(180, settings.get_int("popup-width"));
 }
 
 export const Tonearm = GObject.registerClass(
@@ -61,7 +41,6 @@ export const Tonearm = GObject.registerClass(
       });
 
       this._settings = settings ?? null;
-      this._isDestroyed = false;
       this._isPlaying = false;
       this._angle = TONEARM_PARKED_ANGLE;
       this._animationId = null;
@@ -72,11 +51,9 @@ export const Tonearm = GObject.registerClass(
 
       // Listen for popup-width changes and resize the canvas immediately
       if (this._settings) {
-        this._sizeChangedId = _connect(
-          this._settings,
+        this._sizeChangedId = this._settings.connect(
           "changed::popup-width",
           () => {
-            if (this._isDestroyed) return;
             const newSz = _canvasSize(this._settings);
             this.set_width(newSz);
             this.set_height(newSz);
@@ -85,7 +62,7 @@ export const Tonearm = GObject.registerClass(
         );
       }
 
-      this._repaintId = _connect(this, "repaint", (area) => this._draw(area));
+      this._repaintId = this.connect("repaint", (area) => this._draw(area));
     }
 
     // Public API
@@ -127,11 +104,6 @@ export const Tonearm = GObject.registerClass(
         GLib.PRIORITY_DEFAULT,
         Math.round(1000 / FPS),
         () => {
-          if (this._isDestroyed) {
-            this._animationId = null;
-            return GLib.SOURCE_REMOVE;
-          }
-
           step++;
           const t = step / totalSteps;
           // Ease-in-out cubic
@@ -162,22 +134,8 @@ export const Tonearm = GObject.registerClass(
     // Drawing
 
     _draw(area) {
-      let cr;
-      try {
-        cr = area.get_context();
-      } catch (_e) {
-        return;
-      }
-
-      let width;
-      try {
-        [width] = area.get_surface_size();
-      } catch (_e) {
-        try {
-          cr.$dispose();
-        } catch (__) {}
-        return;
-      }
+      const cr = area.get_context();
+      const [width] = area.get_surface_size();
 
       // Scale factor relative to the original 340 px design
       const S = width / 340;
@@ -325,22 +283,19 @@ export const Tonearm = GObject.registerClass(
       cr.setSourceRGBA(0.6, 0.6, 0.62, 0.8);
       cr.fill();
 
-      try {
-        cr.$dispose();
-      } catch (_e) {}
+      cr.$dispose();
     }
 
     destroy() {
-      this._isDestroyed = true;
       this._cancelAnimation();
 
       if (this._repaintId) {
-        _disconnect(this, this._repaintId);
+        this.disconnect(this._repaintId);
         this._repaintId = 0;
       }
 
       if (this._sizeChangedId && this._settings) {
-        _disconnect(this._settings, this._sizeChangedId);
+        this._settings.disconnect(this._sizeChangedId);
         this._sizeChangedId = 0;
       }
 

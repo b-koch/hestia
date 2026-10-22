@@ -176,13 +176,9 @@ export function buildGeneralPage(settings) {
     ];
 
     const _readPanelOrder = () => {
-        try {
-          const raw = settings.get_string("panel-element-order");
-          if (!raw) throw new Error("empty");
-          return raw.split(",").map(s => s.trim()).filter(Boolean);
-        } catch (_e) {
-          return ["icon", "label", "controls"];
-        }
+        const raw = settings.get_string("panel-element-order");
+        if (!raw) return ["icon", "label", "controls"];
+        return raw.split(",").map(s => s.trim()).filter(Boolean);
       };
     
       const _writePanelOrder = (arr) =>

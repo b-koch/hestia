@@ -2,8 +2,37 @@ import Adw from "gi://Adw";
 import Gtk from "gi://Gtk";
 import Gio from "gi://Gio";
 import Gdk from "gi://Gdk";
+import GLib from "gi://GLib";
 import GObject from "gi://GObject";
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
+
+function clearCoverCache() {
+  const wipe = (dir) => {
+    if (!dir.query_exists(null)) return;
+
+    const children = dir.enumerate_children(
+      "standard::name,standard::type",
+      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+      null,
+    );
+
+    for (const info of children) {
+      const child = dir.get_child(info.get_name());
+      if (info.get_file_type() === Gio.FileType.DIRECTORY) wipe(child);
+      try {
+        child.delete(null);
+      } catch (e) {
+        console.error(`Cover cache entry not removed: ${e.message}`);
+      }
+    }
+  };
+
+  wipe(
+    Gio.File.new_for_path(
+      GLib.build_filenamev([GLib.get_user_cache_dir(), "mpris-covers"]),
+    ),
+  );
+}
 
 /**
  * Builds and returns the Popup Player preferences page
@@ -129,6 +158,30 @@ export function buildPopupPage(settings) {
   );
   artistScrollGroup.add(artistScrollSpeedRow);
 
+  //  Immersive Cover
+  const immersiveGroup = new Adw.PreferencesGroup({
+    title: _("Immersive Cover"),
+    description: _(
+      "Use the album art as the popup background with every control drawn on top. " +
+        "Replaces the square and vinyl covers.",
+    ),
+  });
+  popupPage.add(immersiveGroup);
+
+  const immersiveRow = new Adw.SwitchRow({
+    title: _("Enable for all apps"),
+    subtitle: _(
+      "Per-app choices in the Immersive tab take priority over this switch",
+    ),
+  });
+  settings.bind(
+    "immersive-cover",
+    immersiveRow,
+    "active",
+    Gio.SettingsBindFlags.DEFAULT,
+  );
+  immersiveGroup.add(immersiveRow);
+
   //  Album Art & Vinyl
   const albumArtGroup = new Adw.PreferencesGroup({
     title: _("Album Art"),
@@ -200,6 +253,31 @@ export function buildPopupPage(settings) {
   infoBox.append(infoLabel);
   rotationInfoRow.add_row(infoBox);
   albumArtGroup.add(rotationInfoRow);
+
+  const clearCacheRow = new Adw.ActionRow({
+    title: _("Clear Album Art Cache"),
+    subtitle: _(
+      "Delete downloaded covers and generated backdrops, then fetch the current cover again",
+    ),
+  });
+  const clearCacheBtn = new Gtk.Button({
+    label: _("Clear"),
+    valign: Gtk.Align.CENTER,
+    css_classes: ["destructive-action"],
+  });
+  clearCacheBtn.connect("clicked", () => {
+    clearCoverCache();
+    settings.set_int(
+      "cover-cache-version",
+      settings.get_int("cover-cache-version") + 1,
+    );
+    clearCacheBtn
+      .get_root()
+      ?.add_toast?.(new Adw.Toast({ title: _("Album art cache cleared") }));
+  });
+  clearCacheRow.add_suffix(clearCacheBtn);
+  clearCacheRow.activatable_widget = clearCacheBtn;
+  albumArtGroup.add(clearCacheRow);
 
   //  Tonearm Angles
   const tonearmGroup = new Adw.PreferencesGroup({
@@ -317,10 +395,31 @@ export function buildPopupPage(settings) {
   );
   clickGroup.add(lyricsClickRow);
 
+  const immersiveClickRow = new Adw.SpinRow({
+    title: _("Clicks to toggle immersive mode"),
+    subtitle: _(
+      "Rapidly click the album art this many times to switch the immersive cover on or off for the current app",
+    ),
+    adjustment: new Gtk.Adjustment({
+      lower: 1,
+      upper: 5,
+      step_increment: 1,
+      page_increment: 1,
+      value: settings.get_int("immersive-click-count"),
+    }),
+  });
+  settings.bind(
+    "immersive-click-count",
+    immersiveClickRow,
+    "value",
+    Gio.SettingsBindFlags.DEFAULT,
+  );
+  clickGroup.add(immersiveClickRow);
+
   const thresholdNote = new Adw.ActionRow({
     title: _("Note: thresholds must be different"),
     subtitle: _(
-      "If both thresholds are set to the same number the lyrics action takes priority. Use distinct values (e.g. 2 for vinyl, 3 for lyrics) to trigger both independently.",
+      "If two thresholds are set to the same number the lyrics action wins, then immersive, then vinyl. Use distinct values (e.g. 2 for vinyl, 3 for lyrics, 4 for immersive) to trigger each independently.",
     ),
     activatable: false,
   });
@@ -336,116 +435,138 @@ export function buildPopupPage(settings) {
 
   //  Popup Button Order
   const btnOrderGroup = new Adw.PreferencesGroup({
-      title: _("Control Button Order"),
-      description: _(
-        "Drag and drop the rows to reorder the playback control buttons shown in the popup player. Changes take effect immediately.",
-      ),
+    title: _("Control Button Order"),
+    description: _(
+      "Drag and drop the rows to reorder the playback control buttons shown in the popup player. Changes take effect immediately.",
+    ),
+  });
+  popupPage.add(btnOrderGroup);
+
+  const POPUP_BUTTONS = [
+    {
+      id: "shuffle",
+      label: _("Shuffle"),
+      icon: "media-playlist-shuffle-symbolic",
+    },
+    {
+      id: "previous",
+      label: _("Previous"),
+      icon: "media-skip-backward-symbolic",
+    },
+    {
+      id: "play",
+      label: _("Play / Pause"),
+      icon: "media-playback-start-symbolic",
+    },
+    { id: "next", label: _("Next"), icon: "media-skip-forward-symbolic" },
+    {
+      id: "repeat",
+      label: _("Repeat"),
+      icon: "media-playlist-repeat-symbolic",
+    },
+  ];
+
+  const _readBtnOrder = () => {
+    const raw = settings.get_string("popup-button-order");
+    if (!raw) return ["shuffle", "previous", "play", "next", "repeat"];
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  };
+
+  const _writeBtnOrder = (arr) =>
+    settings.set_string("popup-button-order", arr.join(","));
+
+  const _rebuildBtnOrderRows = () => {
+    if (btnOrderGroup.listBox) {
+      btnOrderGroup.remove(btnOrderGroup.listBox);
+    }
+
+    const listBox = new Gtk.ListBox({
+      css_classes: ["boxed-list"],
+      selection_mode: Gtk.SelectionMode.NONE,
     });
-    popupPage.add(btnOrderGroup);
-  
-    const POPUP_BUTTONS = [
-      { id: "shuffle",  label: _("Shuffle"),   icon: "media-playlist-shuffle-symbolic" },
-      { id: "previous", label: _("Previous"),  icon: "media-skip-backward-symbolic" },
-      { id: "play",     label: _("Play / Pause"), icon: "media-playback-start-symbolic" },
-      { id: "next",     label: _("Next"),       icon: "media-skip-forward-symbolic" },
-      { id: "repeat",   label: _("Repeat"),     icon: "media-playlist-repeat-symbolic" },
-    ];
-  
-    const _readBtnOrder = () => {
-      try {
-        const raw = settings.get_string("popup-button-order");
-        if (!raw) throw new Error("empty");
-        return raw.split(",").map(s => s.trim()).filter(Boolean);
-      } catch (_e) {
-        return ["shuffle", "previous", "play", "next", "repeat"];
-      }
-    };
-  
-    const _writeBtnOrder = (arr) =>
-      settings.set_string("popup-button-order", arr.join(","));
-  
-    const _rebuildBtnOrderRows = () => {
-      if (btnOrderGroup.listBox) {
-        btnOrderGroup.remove(btnOrderGroup.listBox);
-      }
-  
-      const listBox = new Gtk.ListBox({
-        css_classes: ["boxed-list"],
-        selection_mode: Gtk.SelectionMode.NONE,
-      });
-      btnOrderGroup.listBox = listBox;
-      btnOrderGroup.add(listBox);
-  
-      const currentOrder = _readBtnOrder();
-  
-      currentOrder.forEach((id) => {
-        const meta = POPUP_BUTTONS.find(b => b.id === id) ||
-          { id, label: id, icon: "application-x-executable-symbolic" };
-  
-        const row = new Adw.ActionRow({ title: meta.label, activatable: false });
-        
-        row.add_prefix(new Gtk.Image({
+    btnOrderGroup.listBox = listBox;
+    btnOrderGroup.add(listBox);
+
+    const currentOrder = _readBtnOrder();
+
+    currentOrder.forEach((id) => {
+      const meta = POPUP_BUTTONS.find((b) => b.id === id) || {
+        id,
+        label: id,
+        icon: "application-x-executable-symbolic",
+      };
+
+      const row = new Adw.ActionRow({ title: meta.label, activatable: false });
+
+      row.add_prefix(
+        new Gtk.Image({
           icon_name: "list-drag-handle-symbolic",
           pixel_size: 16,
           valign: Gtk.Align.CENTER,
           margin_end: 8,
-          css_classes: ["dim-label"]
-        }));
-  
-        row.add_prefix(new Gtk.Image({
+          css_classes: ["dim-label"],
+        }),
+      );
+
+      row.add_prefix(
+        new Gtk.Image({
           icon_name: meta.icon,
           pixel_size: 20,
           valign: Gtk.Align.CENTER,
-        }));
-  
-        // DND: Drag Source
-        const dragSource = new Gtk.DragSource({ actions: Gdk.DragAction.MOVE });
-        dragSource.connect("prepare", () => {
-          const val = new GObject.Value();
-          val.init(GObject.TYPE_STRING);
-          val.set_string(meta.id);
-          return Gdk.ContentProvider.new_for_value(val);
-        });
-        row.add_controller(dragSource);
-  
-        // DND: Drop Target
-        const dropTarget = new Gtk.DropTarget({
-          actions: Gdk.DragAction.MOVE,
-          formats: Gdk.ContentFormats.new_for_gtype(GObject.TYPE_STRING)
-        });
-        
-        dropTarget.connect("drop", (target, value) => {
-          const sourceId = typeof value === "string" ? value : value.get_string();
-          if (sourceId === meta.id) return false;
-  
-          const order = _readBtnOrder();
-          const fromIdx = order.indexOf(sourceId);
-          const toIdx = order.indexOf(meta.id);
-  
-          if (fromIdx > -1 && toIdx > -1) {
-            order.splice(fromIdx, 1);
-            order.splice(toIdx, 0, sourceId);
-            _writeBtnOrder(order);
-            _rebuildBtnOrderRows();
-            return true;
-          }
-          return false;
-        });
-        row.add_controller(dropTarget);
-  
-        listBox.append(row);
+        }),
+      );
+
+      // DND: Drag Source
+      const dragSource = new Gtk.DragSource({ actions: Gdk.DragAction.MOVE });
+      dragSource.connect("prepare", () => {
+        const val = new GObject.Value();
+        val.init(GObject.TYPE_STRING);
+        val.set_string(meta.id);
+        return Gdk.ContentProvider.new_for_value(val);
       });
-    };
-  
-    _rebuildBtnOrderRows();
-  
-    const _btnOrderChangedId = settings.connect(
-      "changed::popup-button-order",
-      _rebuildBtnOrderRows,
-    );
-    popupPage.connect("destroy", () => {
-      settings.disconnect(_btnOrderChangedId);
+      row.add_controller(dragSource);
+
+      // DND: Drop Target
+      const dropTarget = new Gtk.DropTarget({
+        actions: Gdk.DragAction.MOVE,
+        formats: Gdk.ContentFormats.new_for_gtype(GObject.TYPE_STRING),
+      });
+
+      dropTarget.connect("drop", (target, value) => {
+        const sourceId = typeof value === "string" ? value : value.get_string();
+        if (sourceId === meta.id) return false;
+
+        const order = _readBtnOrder();
+        const fromIdx = order.indexOf(sourceId);
+        const toIdx = order.indexOf(meta.id);
+
+        if (fromIdx > -1 && toIdx > -1) {
+          order.splice(fromIdx, 1);
+          order.splice(toIdx, 0, sourceId);
+          _writeBtnOrder(order);
+          _rebuildBtnOrderRows();
+          return true;
+        }
+        return false;
+      });
+      row.add_controller(dropTarget);
+
+      listBox.append(row);
     });
-  
-    return popupPage;
-  }
+  };
+
+  _rebuildBtnOrderRows();
+
+  const _btnOrderChangedId = settings.connect(
+    "changed::popup-button-order",
+    _rebuildBtnOrderRows,
+  );
+  popupPage.connect("destroy", () => {
+    settings.disconnect(_btnOrderChangedId);
+  });
+
+  return popupPage;
+}

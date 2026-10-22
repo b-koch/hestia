@@ -39,12 +39,8 @@ const _SKIP = new Set([
 
 function _getIdentity(playerName, manager) {
   if (!manager || !playerName) return "";
-  try {
-    const identity = manager._identities && manager._identities.get(playerName);
-    return identity ? identity.trim().toLowerCase() : "";
-  } catch (_) {
-    return "";
-  }
+  const identity = manager._identities?.get(playerName);
+  return identity ? identity.trim().toLowerCase() : "";
 }
 
 function _identityToDesktopId(identity) {
@@ -59,38 +55,36 @@ function _identityToDesktopId(identity) {
 
 function _scoreApp(app, segments, exact, identity) {
   let score = 0;
-  try {
-    const rawId = (app.get_id() || "").toLowerCase();
-    const noSuffix = rawId.endsWith(".desktop") ? rawId.slice(0, -8) : rawId;
-    const dn = (app.get_display_name() || "").toLowerCase();
-    const exec = (app.get_executable() || "").toLowerCase().trim();
+  const rawId = (app.get_id() || "").toLowerCase();
+  const noSuffix = rawId.endsWith(".desktop") ? rawId.slice(0, -8) : rawId;
+  const dn = (app.get_display_name() || "").toLowerCase();
+  const exec = (app.get_executable() || "").toLowerCase().trim();
 
-    if (exact.has(rawId) || exact.has(noSuffix)) score += 100;
+  if (exact.has(rawId) || exact.has(noSuffix)) score += 100;
 
-    for (const seg of noSuffix.split(".")) {
-      if (seg.length > 2 && segments.has(seg)) score += 40;
-    }
+  for (const seg of noSuffix.split(".")) {
+    if (seg.length > 2 && segments.has(seg)) score += 40;
+  }
 
-    const dnFirst = dn.split(/\s+/)[0];
-    const dnNoSpace = dn.replace(/\s+/g, "");
-    if (dnFirst.length > 2 && segments.has(dnFirst)) score += 35;
-    if (dnNoSpace.length > 2 && segments.has(dnNoSpace)) score += 30;
+  const dnFirst = dn.split(/\s+/)[0];
+  const dnNoSpace = dn.replace(/\s+/g, "");
+  if (dnFirst.length > 2 && segments.has(dnFirst)) score += 35;
+  if (dnNoSpace.length > 2 && segments.has(dnNoSpace)) score += 30;
 
-    if (exec.length > 2 && segments.has(exec)) score += 25;
-    for (const part of exec.split(/[-_]/)) {
-      if (part.length > 2 && segments.has(part)) score += 15;
-    }
+  if (exec.length > 2 && segments.has(exec)) score += 25;
+  for (const part of exec.split(/[-_]/)) {
+    if (part.length > 2 && segments.has(part)) score += 15;
+  }
 
-    const snapParts = noSuffix.split("_");
-    if (snapParts.length >= 2 && snapParts[0].length > 2 && segments.has(snapParts[0]))
-      score += 20;
+  const snapParts = noSuffix.split("_");
+  if (snapParts.length >= 2 && snapParts[0].length > 2 && segments.has(snapParts[0]))
+    score += 20;
 
-    if (identity) {
-      const idFirst = identity.split(/\s+/)[0];
-      if (dn.includes(idFirst) || noSuffix.includes(idFirst)) score += 50;
-      else score -= 80;
-    }
-  } catch (_) {}
+  if (identity) {
+    const idFirst = identity.split(/\s+/)[0];
+    if (dn.includes(idFirst) || noSuffix.includes(idFirst)) score += 50;
+    else score -= 80;
+  }
   return score;
 }
 
@@ -171,58 +165,52 @@ export function resolveGicon(playerName, manager) {
   const identity = _getIdentity(playerName, manager);
 
   if (manager) {
-    try {
-      const ai = manager.getAppInfo(playerName);
-      if (ai) {
-        const safe = _appMatchesIdentity(ai, identity);
-        if (safe) {
-          const gi = ai.get_icon();
-          if (gi) return gi;
-        }
+    const ai = manager.getAppInfo(playerName);
+    if (ai) {
+      const safe = _appMatchesIdentity(ai, identity);
+      if (safe) {
+        const gi = ai.get_icon();
+        if (gi) return gi;
       }
-    } catch (_) {}
+    }
   }
 
   if (!_iconCache.has(playerName)) {
     const knownId = _identityToDesktopId(identity);
     if (knownId) {
-      try {
-        const allApps = Gio.AppInfo.get_all();
-        for (const app of allApps) {
-          const rawId = (app.get_id() || "").toLowerCase();
-          if (rawId === knownId || rawId === knownId.replace(/\.desktop$/, "")) {
-            const gi = app.get_icon();
-            if (gi) {
-              _iconCache.set(playerName, gi);
-              break;
-            }
+      const allApps = Gio.AppInfo.get_all();
+      for (const app of allApps) {
+        const rawId = (app.get_id() || "").toLowerCase();
+        if (rawId === knownId || rawId === knownId.replace(/\.desktop$/, "")) {
+          const gi = app.get_icon();
+          if (gi) {
+            _iconCache.set(playerName, gi);
+            break;
           }
         }
-      } catch (_) {}
+      }
     }
   }
 
   if (!_iconCache.has(playerName)) {
     _iconCache.set(playerName, null);
-    try {
-      const cand = _buildCandidateTokens(playerName, manager);
-      const allApps = Gio.AppInfo.get_all();
-      let bestApp = null;
-      let bestScore = 0;
+    const cand = _buildCandidateTokens(playerName, manager);
+    const allApps = Gio.AppInfo.get_all();
+    let bestApp = null;
+    let bestScore = 0;
 
-      for (const app of allApps) {
-        const score = _scoreApp(app, cand.segments, cand.exact, identity);
-        if (score > 0 && score > bestScore) {
-          bestScore = score;
-          bestApp = app;
-        }
+    for (const app of allApps) {
+      const score = _scoreApp(app, cand.segments, cand.exact, identity);
+      if (score > 0 && score > bestScore) {
+        bestScore = score;
+        bestApp = app;
       }
+    }
 
-      if (bestApp) {
-        const gi = bestApp.get_icon();
-        if (gi) _iconCache.set(playerName, gi);
-      }
-    } catch (_) {}
+    if (bestApp) {
+      const gi = bestApp.get_icon();
+      if (gi) _iconCache.set(playerName, gi);
+    }
   }
 
   const cached = _iconCache.get(playerName);
@@ -296,26 +284,24 @@ export function resolveMonochromeGicon(playerName, manager) {
 export function applyMonochromeToIcon(stIcon, colourGicon, playerName, manager, monochrome) {
   if (!stIcon) return;
 
-  try {
-    if (colourGicon instanceof Gio.ThemedIcon) {
-      if (monochrome) {
-        stIcon.gicon = resolveMonochromeGicon(playerName, manager);
-      } else {
-        stIcon.gicon = colourGicon;
-      }
-      _removeDesaturateEffect(stIcon);
-      return;
-    }
-
-    if (colourGicon instanceof Gio.FileIcon) {
+  if (colourGicon instanceof Gio.ThemedIcon) {
+    if (monochrome) {
+      stIcon.gicon = resolveMonochromeGicon(playerName, manager);
+    } else {
       stIcon.gicon = colourGicon;
-      if (monochrome) {
-        _ensureDesaturateEffect(stIcon);
-      } else {
-        _removeDesaturateEffect(stIcon);
-      }
     }
-  } catch (_) {}
+    _removeDesaturateEffect(stIcon);
+    return;
+  }
+
+  if (colourGicon instanceof Gio.FileIcon) {
+    stIcon.gicon = colourGicon;
+    if (monochrome) {
+      _ensureDesaturateEffect(stIcon);
+    } else {
+      _removeDesaturateEffect(stIcon);
+    }
+  }
 }
 
 function _ensureDesaturateEffect(actor) {
@@ -332,47 +318,39 @@ function _removeDesaturateEffect(actor) {
 
 function _appMatchesIdentity(app, identity) {
   if (!identity) return true;
-  try {
-    const dn = (app.get_display_name() || "").toLowerCase();
-    const id = (app.get_id() || "").toLowerCase();
-    const exc = (app.get_executable() || "").toLowerCase();
-    const first = identity.split(/\s+/)[0];
-    return dn.includes(first) || id.includes(first) || exc.includes(first);
-  } catch (_) {
-    return true;
-  }
+  const dn = (app.get_display_name() || "").toLowerCase();
+  const id = (app.get_id() || "").toLowerCase();
+  const exc = (app.get_executable() || "").toLowerCase();
+  const first = identity.split(/\s+/)[0];
+  return dn.includes(first) || id.includes(first) || exc.includes(first);
 }
 
 export function resolveDisplayName(playerName, manager) {
   if (manager) {
-    try {
-      const identity = manager._identities && manager._identities.get(playerName);
-      if (identity && identity.trim()) return identity.trim();
-    } catch (_) {}
+    const identity = manager._identities && manager._identities.get(playerName);
+    if (identity && identity.trim()) return identity.trim();
   }
 
-  try {
-    if (manager) {
-      const identity = _getIdentity(playerName, manager);
-      const ai = manager.getAppInfo(playerName);
-      if (ai && _appMatchesIdentity(ai, identity)) {
-        const n = ai.get_display_name();
-        if (n) return n;
-      }
+  if (manager) {
+    const identity = _getIdentity(playerName, manager);
+    const ai = manager.getAppInfo(playerName);
+    if (ai && _appMatchesIdentity(ai, identity)) {
+      const n = ai.get_display_name();
+      if (n) return n;
     }
+  }
 
-    const cand = _buildCandidateTokens(playerName, manager);
-    const allApps = Gio.AppInfo.get_all();
+  const cand = _buildCandidateTokens(playerName, manager);
+  const allApps = Gio.AppInfo.get_all();
 
-    for (const app of allApps) {
-      const rawId = (app.get_id() || "").toLowerCase();
-      const noSuffix = rawId.endsWith(".desktop") ? rawId.slice(0, -8) : rawId;
-      if (cand.exact.has(rawId) || cand.exact.has(noSuffix)) {
-        const n = app.get_display_name();
-        if (n) return n;
-      }
+  for (const app of allApps) {
+    const rawId = (app.get_id() || "").toLowerCase();
+    const noSuffix = rawId.endsWith(".desktop") ? rawId.slice(0, -8) : rawId;
+    if (cand.exact.has(rawId) || cand.exact.has(noSuffix)) {
+      const n = app.get_display_name();
+      if (n) return n;
     }
-  } catch (_) {}
+  }
 
   if (playerName) {
     const tail = playerName
