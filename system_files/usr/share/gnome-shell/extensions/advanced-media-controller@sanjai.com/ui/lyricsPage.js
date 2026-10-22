@@ -1,6 +1,7 @@
 import Adw from "gi://Adw";
 import Gtk from "gi://Gtk";
 import Gio from "gi://Gio";
+import Gdk from "gi://Gdk";
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 /**
@@ -32,6 +33,27 @@ export function buildLyricsPage(page, settings) {
   );
   enableGroup.add(enableLyricsRow);
 
+  const gradientRow = new Adw.SwitchRow({
+    title: _("Gradient Background"),
+    subtitle: _(
+      "In immersive mode, show a gradient from the cover colours behind the lyrics instead of the cover image",
+    ),
+    icon_name: "preferences-desktop-appearance-symbolic",
+  });
+  settings.bind(
+    "lyrics-gradient-background",
+    gradientRow,
+    "active",
+    Gio.SettingsBindFlags.DEFAULT,
+  );
+  settings.bind(
+    "enable-lyrics",
+    gradientRow,
+    "sensitive",
+    Gio.SettingsBindFlags.GET,
+  );
+  enableGroup.add(gradientRow);
+
   //  How to Use Lyrics
   const howtoGroup = new Adw.PreferencesGroup({
     title: _("How to Use Lyrics"),
@@ -41,11 +63,7 @@ export function buildLyricsPage(page, settings) {
   });
   page.add(howtoGroup);
 
-  let lyricsN = 3;
-  try {
-    lyricsN = settings.get_int("lyrics-click-count");
-  } catch (_e) {}
-  lyricsN = Math.max(1, Math.min(5, lyricsN));
+  const lyricsN = Math.max(1, Math.min(5, settings.get_int("lyrics-click-count")));
   const clickWord = (n) =>
     n === 1 ? _("once") : n === 2 ? _("twice") : _("%d times").format(n);
 
@@ -262,9 +280,7 @@ export function buildLyricsPage(page, settings) {
     }),
   );
   lrclibRow.connect("activated", () => {
-    try {
-      Gio.AppInfo.launch_default_for_uri("https://lrclib.net", null);
-    } catch (e) {}
+    Gtk.show_uri(page.get_root(), "https://lrclib.net", Gdk.CURRENT_TIME);
   });
   sourceGroup.add(lrclibRow);
 

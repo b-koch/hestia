@@ -1,84 +1,50 @@
+import GLib from "gi://GLib";
 import {
   Extension,
-  gettext as _,
   InjectionManager,
 } from "resource:///org/gnome/shell/extensions/extension.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import GLib from "gi://GLib";
-import { MediaIndicator } from "./utils/indicator.js";
 import * as Mpris from "resource:///org/gnome/shell/ui/mpris.js";
+
+import { MediaIndicator } from "./utils/indicator.js";
+import { installDefaultThemesIfNeeded } from "./utils/DefaultThemeInstaller.js";
+
+const REPOSITION_DELAY_MS = 150;
 
 export default class MediaExtension extends Extension {
   enable() {
-    this._settings = this.getSettings();
-    this._repositionDebounceId = null;
-    this._settingsChangedId = 0;
-    this._hideDefaultChangedId = null;
-    this._injectionManager = null;
+    this._themeInstallCancellable = installDefaultThemesIfNeeded();
 
+    this._settings = this.getSettings();
     this._indicator = new MediaIndicator(this._settings, this);
     this._addToPanel();
 
-    this._applyHideDefaultPlayer(
-      this._settings.get_boolean("hide-default-player"),
-    );
-
-    this._hideDefaultChangedId = this._settings.connect(
+    this._settings.connectObject(
       "changed::hide-default-player",
-      () => {
-        this._applyHideDefaultPlayer(
-          this._settings.get_boolean("hide-default-player"),
-        );
-        this._updateDefaultPlayerVisibility();
-      },
+      () => this._syncDefaultPlayer(),
+      "changed::panel-position",
+      () => this._queueReposition(),
+      "changed::panel-index",
+      () => this._queueReposition(),
+      this,
     );
 
-    this._updateDefaultPlayerVisibility();
-
-    this._settingsChangedId = this._settings.connect("changed", (_, key) => {
-      if (key !== "panel-position" && key !== "panel-index") return;
-
-      if (this._repositionDebounceId) {
-        GLib.source_remove(this._repositionDebounceId);
-        this._repositionDebounceId = null;
-      }
-
-      this._repositionDebounceId = GLib.timeout_add(
-        GLib.PRIORITY_DEFAULT_IDLE,
-        150,
-        () => {
-          this._repositionDebounceId = null;
-          this._repositionIndicator();
-          return GLib.SOURCE_REMOVE;
-        },
-      );
-    });
+    this._syncDefaultPlayer();
   }
 
   disable() {
-    if (this._repositionDebounceId) {
-      GLib.source_remove(this._repositionDebounceId);
-      this._repositionDebounceId = null;
-    }
+    this._themeInstallCancellable?.cancel();
+    this._themeInstallCancellable = null;
 
-    if (this._settingsChangedId) {
-      this._settings.disconnect(this._settingsChangedId);
-      this._settingsChangedId = 0;
-    }
+    this._clearRepositionTimeout();
+    this._settings.disconnectObject(this);
 
-    if (this._hideDefaultChangedId) {
-      this._settings.disconnect(this._hideDefaultChangedId);
-      this._hideDefaultChangedId = null;
-    }
+    this._setDateMenuMediaVisible(true);
+    this._restoreNativePlayers();
 
-    this._applyHideDefaultPlayer(false);
     this._indicator.destroy();
     this._indicator = null;
-
-    this._updateDefaultPlayerVisibility(true);
-
     this._settings = null;
-    this._injectionManager = null;
   }
 
   get _statusAreaKey() {
@@ -86,7 +52,7 @@ export default class MediaExtension extends Extension {
   }
 
   _addToPanel() {
-    const { position, index } = this._getPanelPlacement();
+    const { position, index } = this._panelPlacement();
     Main.panel.addToStatusArea(
       this._statusAreaKey,
       this._indicator,
@@ -95,77 +61,77 @@ export default class MediaExtension extends Extension {
     );
   }
 
-  _repositionIndicator() {
-    if (!this._indicator) return;
-
-    const container = this._indicator.container;
-    const parent = container.get_parent();
-    if (parent) parent.remove_child(container);
-
-    delete Main.panel.statusArea[this._statusAreaKey];
-
-    const { position, index } = this._getPanelPlacement();
-    Main.panel.addToStatusArea(
-      this._statusAreaKey,
-      this._indicator,
-      index,
-      position,
-    );
-  }
-
-  /** @returns {{ position: string, index: number }} */
-  _getPanelPlacement() {
+  _panelPlacement() {
+    const boxes = {
+      left: Main.panel._leftBox,
+      center: Main.panel._centerBox,
+      right: Main.panel._rightBox,
+    };
     const position = this._settings.get_string("panel-position");
     const rawIndex = this._settings.get_int("panel-index");
-
-    const boxMap = {
-      left: "_leftBox",
-      center: "_centerBox",
-      right: "_rightBox",
-    };
-    const targetBox = Main.panel[boxMap[position] ?? "_rightBox"];
+    const box = boxes[position] ?? boxes.right;
     const index =
-      rawIndex === -1 ? 0 : Math.min(rawIndex, targetBox.get_n_children());
+      rawIndex === -1 ? 0 : Math.min(rawIndex, box.get_n_children());
 
     return { position, index };
   }
 
-  _applyHideDefaultPlayer(hide) {
-    const mediaSection = this._getMediaSection();
-    if (mediaSection) mediaSection.visible = !hide;
+  _queueReposition() {
+    this._clearRepositionTimeout();
+    this._repositionId = GLib.timeout_add(
+      GLib.PRIORITY_DEFAULT_IDLE,
+      REPOSITION_DELAY_MS,
+      () => {
+        this._repositionId = null;
+        this._repositionIndicator();
+        return GLib.SOURCE_REMOVE;
+      },
+    );
   }
 
-  // GNOME 48 moved the media section from _messageList._mediaSection to
-  // _messageList._messageView._mediaSource and renamed Mpris.MediaSection
-  // to Mpris.MprisSource. Pre-48 path is kept for 45-47
-  _getMediaSection() {
-    const messageList = Main.panel.statusArea.dateMenu._messageList;
-    return messageList._messageView?._mediaSource ?? messageList._mediaSection;
+  _clearRepositionTimeout() {
+    if (!this._repositionId) return;
+    GLib.Source.remove(this._repositionId);
+    this._repositionId = null;
   }
 
-  _getQuickSettingsMedia() {
-    return Main.panel.statusArea.quickSettings._mediaSection;
+  _repositionIndicator() {
+    const { container } = this._indicator;
+    container.get_parent()?.remove_child(container);
+    delete Main.panel.statusArea[this._statusAreaKey];
+    this._addToPanel();
   }
 
-  _updateDefaultPlayerVisibility(shouldReset = false) {
-    if (!this._settings) return;
-    const hide = this._settings.get_boolean("hide-default-player");
-
-    const MprisSource = Mpris.MprisSource ?? Mpris.MediaSection;
-    const mediaSection = this._getMediaSection();
-    const qsMedia = this._getQuickSettingsMedia();
-
-    if (shouldReset || hide === false) {
-      if (this._injectionManager) {
-        this._injectionManager.clear();
-        this._injectionManager = null;
-      }
-      // kick the proxy callbacks so the native sections repopulate
-      if (mediaSection) mediaSection._onProxyReady?.();
-      if (qsMedia) qsMedia._onProxyReady?.();
-      return;
+  _syncDefaultPlayer() {
+    if (this._settings.get_boolean("hide-default-player")) {
+      this._setDateMenuMediaVisible(false);
+      this._suppressNativePlayers();
+    } else {
+      this._setDateMenuMediaVisible(true);
+      this._restoreNativePlayers();
     }
+  }
 
+  
+  _nativeMediaSections() {
+    const { dateMenu, quickSettings } = Main.panel.statusArea;
+    const messageList = dateMenu?._messageList;
+
+    return [
+      messageList?._messageView?._mediaSource ?? messageList?._mediaSection,
+      quickSettings?._mediaSection,
+    ].filter(Boolean);
+  }
+
+  _setDateMenuMediaVisible(visible) {
+    if (Mpris.MprisSource) return;
+
+    const section = Main.panel.statusArea.dateMenu?._messageList?._mediaSection;
+    if (section) section.visible = visible;
+  }
+
+  _suppressNativePlayers() {
+    const MprisSource = Mpris.MprisSource ?? Mpris.MediaSection;
     if (this._injectionManager || !MprisSource) return;
 
     this._injectionManager = new InjectionManager();
@@ -175,14 +141,22 @@ export default class MediaExtension extends Extension {
       () => function () {},
     );
 
-    // evict existing players from both panel sections
-    for (const section of [mediaSection, qsMedia]) {
-      if (!section || !section._players) continue;
-      for (const player of section._players.values()) {
-        const busName = player._busName || player.busName;
-        if (section._onNameOwnerChanged && busName)
-          section._onNameOwnerChanged(null, null, [busName, busName, ""]);
+    for (const section of this._nativeMediaSections()) {
+      for (const player of section._players?.values() ?? []) {
+        const busName = player._busName ?? player.busName;
+        if (busName)
+          section._onNameOwnerChanged?.(null, null, [busName, busName, ""]);
       }
     }
+  }
+
+  _restoreNativePlayers() {
+    if (!this._injectionManager) return;
+
+    this._injectionManager.clear();
+    this._injectionManager = null;
+
+    for (const section of this._nativeMediaSections())
+      section._onProxyReady?.();
   }
 }

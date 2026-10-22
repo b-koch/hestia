@@ -55,7 +55,7 @@ export class IndicatorEventHandlers {
       },
 
       // Pin button
-      // pinned = true  => engage pin ,tabPinned = true keeps auto-switch off
+      
 
       "pin-toggled",
       (_, pinned, _playerName) => {

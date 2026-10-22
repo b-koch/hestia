@@ -5,6 +5,14 @@ import GLib from "gi://GLib";
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 import { parseBrowserSourceId, labelForId } from "../lib/utils.js";
 
+const parseRecord = (raw) => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 /**
  * @param {Adw.PreferencesPage} page
  * @param {Gio.Settings} settings
@@ -28,11 +36,7 @@ export function buildVinylAppsPage(page, settings, helpers) {
   };
 
   page.connect("destroy", () => {
-    for (const id of _connIds) {
-      try {
-        settings.disconnect(id);
-      } catch (_) {}
-    }
+    for (const id of _connIds) settings.disconnect(id);
     _connIds.length = 0;
   });
 
@@ -263,157 +267,144 @@ export function buildVinylAppsPage(page, settings, helpers) {
       -1,
       null,
       (conn, res) => {
+        let names;
         try {
-          const result = conn.call_finish(res);
-          const names = result.deep_unpack()[0];
-          const mprisNames = names.filter((n) =>
-            n.startsWith("org.mpris.MediaPlayer2."),
+          names = conn.call_finish(res).deep_unpack()[0];
+        } catch (e) {
+          console.warn(`MPRIS scan failed: ${e.message}`);
+          return;
+        }
+        const mprisNames = names.filter((n) =>
+          n.startsWith("org.mpris.MediaPlayer2."),
+        );
+
+        clearVinylLiveRows();
+
+        if (mprisNames.length === 0) {
+          const noneRow = new Adw.ActionRow({
+            title: _("No active players detected"),
+            subtitle: _("Open a music app and click Refresh"),
+            activatable: false,
+          });
+          noneRow.add_prefix(
+            new Gtk.Image({
+              icon_name: "media-playback-stop-symbolic",
+              pixel_size: 24,
+              valign: Gtk.Align.CENTER,
+              opacity: 0.5,
+            }),
+          );
+          livePlayerGroup.add(noneRow);
+          vinylLiveRows.push(noneRow);
+          return;
+        }
+
+        const seenShort = new Set();
+        for (const fullBus of mprisNames) {
+          let short = fullBus.replace("org.mpris.MediaPlayer2.", "");
+          short = short
+            .replace(/\.instance[_\d]+$/i, "")
+            .replace(/\.\d+$/, "");
+
+          if (seenShort.has(short)) continue;
+          seenShort.add(short);
+
+          const alreadySaved = settings
+            .get_strv("vinyl-app-instances")
+            .some((raw) => {
+              const lower = (parseRecord(raw)?.id ?? "").toLowerCase();
+              return (
+                lower === short.toLowerCase() ||
+                lower.replace(/\.instance[_\d]+$/i, "") ===
+                  short.toLowerCase()
+              );
+            });
+
+          if (alreadySaved) continue;
+
+          const appInfo = findAppInfo(short, short);
+          const appIcon = appInfo ? appInfo.get_icon() : null;
+          const displayName = appInfo
+            ? appInfo.get_display_name() || appInfo.get_name() || short
+            : short;
+
+          const row = new Adw.ActionRow({
+            title: displayName,
+            subtitle: fullBus,
+            activatable: false,
+          });
+
+          row.add_prefix(
+            appIcon
+              ? new Gtk.Image({
+                  gicon: appIcon,
+                  pixel_size: 28,
+                  valign: Gtk.Align.CENTER,
+                })
+              : new Gtk.Image({
+                  icon_name: "application-x-executable-symbolic",
+                  pixel_size: 28,
+                  valign: Gtk.Align.CENTER,
+                }),
           );
 
-          clearVinylLiveRows();
+          const useBtn = new Gtk.Button({
+            label: _("Use This"),
+            valign: Gtk.Align.CENTER,
+            css_classes: ["suggested-action"],
+            tooltip_text: _(
+              "Add \u201c%s\u201d as a vinyl-enabled instance",
+            ).format(displayName),
+          });
 
-          if (mprisNames.length === 0) {
-            const noneRow = new Adw.ActionRow({
-              title: _("No active players detected"),
-              subtitle: _("Open a music app and click Refresh"),
-              activatable: false,
+          useBtn.connect("clicked", () => {
+            const record = JSON.stringify({
+              id: short,
+              name: displayName,
+              desktopId: appInfo
+                ? normalizeAppId(appInfo.get_id() ?? short)
+                : short,
+              busName: fullBus,
+              enabled: true,
             });
-            noneRow.add_prefix(
-              new Gtk.Image({
-                icon_name: "media-playback-stop-symbolic",
-                pixel_size: 24,
-                valign: Gtk.Align.CENTER,
-                opacity: 0.5,
-              }),
-            );
-            livePlayerGroup.add(noneRow);
-            vinylLiveRows.push(noneRow);
-            return;
-          }
-
-          const seenShort = new Set();
-          for (const fullBus of mprisNames) {
-            let short = fullBus.replace("org.mpris.MediaPlayer2.", "");
-            short = short
-              .replace(/\.instance[_\d]+$/i, "")
-              .replace(/\.\d+$/, "");
-
-            if (seenShort.has(short)) continue;
-            seenShort.add(short);
-
-            const existing = (() => {
-              try {
-                return settings.get_strv("vinyl-app-instances") ?? [];
-              } catch (_e) {
-                return [];
-              }
-            })();
-            const alreadySaved = existing.some((raw) => {
-              try {
-                const obj = JSON.parse(raw);
-                const lower = (obj.id ?? "").toLowerCase();
-                return (
-                  lower === short.toLowerCase() ||
-                  lower.replace(/\.instance[_\d]+$/i, "") ===
-                    short.toLowerCase()
-                );
-              } catch (_) {
-                return false;
-              }
+            const deduped = settings
+              .get_strv("vinyl-app-instances")
+              .filter(
+                (raw) =>
+                  parseRecord(raw)?.id?.toLowerCase() !== short.toLowerCase(),
+              );
+            deduped.push(record);
+            settings.set_strv("vinyl-app-instances", deduped);
+            setAppVinylState(settings, short, short.toLowerCase(), true);
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+              scanVinylPlayers();
+              return GLib.SOURCE_REMOVE;
             });
+          });
 
-            if (alreadySaved) continue;
+          row.add_suffix(useBtn);
+          livePlayerGroup.add(row);
+          vinylLiveRows.push(row);
+        }
 
-            const appInfo = findAppInfo(short, short);
-            const appIcon = appInfo ? appInfo.get_icon() : null;
-            const displayName = appInfo
-              ? appInfo.get_display_name() || appInfo.get_name() || short
-              : short;
-
-            const row = new Adw.ActionRow({
-              title: displayName,
-              subtitle: fullBus,
-              activatable: false,
-            });
-
-            row.add_prefix(
-              appIcon
-                ? new Gtk.Image({
-                    gicon: appIcon,
-                    pixel_size: 28,
-                    valign: Gtk.Align.CENTER,
-                  })
-                : new Gtk.Image({
-                    icon_name: "application-x-executable-symbolic",
-                    pixel_size: 28,
-                    valign: Gtk.Align.CENTER,
-                  }),
-            );
-
-            const useBtn = new Gtk.Button({
-              label: _("Use This"),
+        if (vinylLiveRows.length === 0) {
+          const allSavedRow = new Adw.ActionRow({
+            title: _("All running players are already saved"),
+            subtitle: _(
+              "Manage them in the Saved App Instances section above",
+            ),
+            activatable: false,
+          });
+          allSavedRow.add_prefix(
+            new Gtk.Image({
+              icon_name: "object-select-symbolic",
+              pixel_size: 24,
               valign: Gtk.Align.CENTER,
-              css_classes: ["suggested-action"],
-              tooltip_text: _(
-                "Add \u201c%s\u201d as a vinyl-enabled instance",
-              ).format(displayName),
-            });
-
-            useBtn.connect("clicked", () => {
-              const record = JSON.stringify({
-                id: short,
-                name: displayName,
-                desktopId: appInfo
-                  ? normalizeAppId(appInfo.get_id() ?? short)
-                  : short,
-                busName: fullBus,
-                enabled: true,
-              });
-              try {
-                const cur = settings.get_strv("vinyl-app-instances") ?? [];
-                const deduped = cur.filter((raw) => {
-                  try {
-                    return (
-                      JSON.parse(raw).id?.toLowerCase() !== short.toLowerCase()
-                    );
-                  } catch (_) {
-                    return true;
-                  }
-                });
-                deduped.push(record);
-                settings.set_strv("vinyl-app-instances", deduped);
-              } catch (_e) {}
-              setAppVinylState(settings, short, short.toLowerCase(), true);
-              GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                scanVinylPlayers();
-                return GLib.SOURCE_REMOVE;
-              });
-            });
-
-            row.add_suffix(useBtn);
-            livePlayerGroup.add(row);
-            vinylLiveRows.push(row);
-          }
-
-          if (vinylLiveRows.length === 0) {
-            const allSavedRow = new Adw.ActionRow({
-              title: _("All running players are already saved"),
-              subtitle: _(
-                "Manage them in the Saved App Instances section above",
-              ),
-              activatable: false,
-            });
-            allSavedRow.add_prefix(
-              new Gtk.Image({
-                icon_name: "object-select-symbolic",
-                pixel_size: 24,
-                valign: Gtk.Align.CENTER,
-              }),
-            );
-            livePlayerGroup.add(allSavedRow);
-            vinylLiveRows.push(allSavedRow);
-          }
-        } catch (e) {}
+            }),
+          );
+          livePlayerGroup.add(allSavedRow);
+          vinylLiveRows.push(allSavedRow);
+        }
       },
     );
   };

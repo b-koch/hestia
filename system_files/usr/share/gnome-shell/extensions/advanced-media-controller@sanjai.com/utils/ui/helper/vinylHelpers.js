@@ -152,72 +152,70 @@ export function resolveCanonicalIds(playerName, manager) {
   let resolvedBaseId = null;
 
   //Resolve against installed .desktop database
-  try {
-    const candidates = _buildCandidateTokens(playerName, manager);
-    const allApps = Gio.AppInfo.get_all();
+  const candidates = _buildCandidateTokens(playerName, manager);
+  const allApps = Gio.AppInfo.get_all();
 
-    //  exact match on full app-id with or without .desktop
-    for (const app of allApps) {
+  //  exact match on full app-id with or without .desktop
+  for (const app of allApps) {
+    const appId = (app.get_id() ?? "").toLowerCase();
+    const noSuffix = appId.endsWith(".desktop") ? appId.slice(0, -8) : appId;
+    if (candidates.exact.has(appId) || candidates.exact.has(noSuffix)) {
+      resolvedBaseId = noSuffix;
+      _addAppIdVariants(ids, noSuffix);
+      break;
+    }
+  }
+
+  // meaningful segment match handles reverse-DNS & snap prefixes
+  if (!resolvedBaseId) {
+    outer: for (const app of allApps) {
       const appId = (app.get_id() ?? "").toLowerCase();
-      const noSuffix = appId.endsWith(".desktop") ? appId.slice(0, -8) : appId;
-      if (candidates.exact.has(appId) || candidates.exact.has(noSuffix)) {
-        resolvedBaseId = noSuffix;
-        _addAppIdVariants(ids, noSuffix);
-        break;
+      const noSuffix = appId.endsWith(".desktop")
+        ? appId.slice(0, -8)
+        : appId;
+      for (const seg of noSuffix.split(".")) {
+        if (
+          seg.length > 2 &&
+          !SKIP_SEGMENTS.has(seg) &&
+          candidates.segments.has(seg)
+        ) {
+          resolvedBaseId = noSuffix;
+          _addAppIdVariants(ids, noSuffix);
+          break outer;
+        }
       }
     }
+  }
 
-    // meaningful segment match handles reverse-DNS & snap prefixes
-    if (!resolvedBaseId) {
-      outer: for (const app of allApps) {
+  // display-name / first-word match last resort — covers AppImages
+  if (!resolvedBaseId) {
+    outer2: for (const app of allApps) {
+      const name = (app.get_display_name() ?? "")
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      if (name && candidates.segments.has(name)) {
         const appId = (app.get_id() ?? "").toLowerCase();
         const noSuffix = appId.endsWith(".desktop")
           ? appId.slice(0, -8)
           : appId;
-        for (const seg of noSuffix.split(".")) {
-          if (
-            seg.length > 2 &&
-            !SKIP_SEGMENTS.has(seg) &&
-            candidates.segments.has(seg)
-          ) {
-            resolvedBaseId = noSuffix;
-            _addAppIdVariants(ids, noSuffix);
-            break outer;
-          }
-        }
+        resolvedBaseId = noSuffix;
+        _addAppIdVariants(ids, noSuffix);
+        break outer2;
+      }
+      const first = (app.get_display_name() ?? "")
+        .toLowerCase()
+        .split(/\s+/)[0];
+      if (first && first.length > 2 && candidates.segments.has(first)) {
+        const appId = (app.get_id() ?? "").toLowerCase();
+        const noSuffix = appId.endsWith(".desktop")
+          ? appId.slice(0, -8)
+          : appId;
+        resolvedBaseId = noSuffix;
+        _addAppIdVariants(ids, noSuffix);
+        break outer2;
       }
     }
-
-    // display-name / first-word match last resort — covers AppImages
-    if (!resolvedBaseId) {
-      outer2: for (const app of allApps) {
-        const name = (app.get_display_name() ?? "")
-          .toLowerCase()
-          .replace(/\s+/g, "");
-        if (name && candidates.segments.has(name)) {
-          const appId = (app.get_id() ?? "").toLowerCase();
-          const noSuffix = appId.endsWith(".desktop")
-            ? appId.slice(0, -8)
-            : appId;
-          resolvedBaseId = noSuffix;
-          _addAppIdVariants(ids, noSuffix);
-          break outer2;
-        }
-        const first = (app.get_display_name() ?? "")
-          .toLowerCase()
-          .split(/\s+/)[0];
-        if (first && first.length > 2 && candidates.segments.has(first)) {
-          const appId = (app.get_id() ?? "").toLowerCase();
-          const noSuffix = appId.endsWith(".desktop")
-            ? appId.slice(0, -8)
-            : appId;
-          resolvedBaseId = noSuffix;
-          _addAppIdVariants(ids, noSuffix);
-          break outer2;
-        }
-      }
-    }
-  } catch (_e) {}
+  }
 
   //MprisManager desktopEntries map
   if (manager) {
@@ -318,11 +316,7 @@ export function isVinylEnabledForIds(canonicalIds, vinylApps) {
  * @returns {string[]}
  */
 export function getVinylApps(settings) {
-  try {
-    return settings.get_strv("vinyl-app-ids") ?? [];
-  } catch (_e) {
-    return [];
-  }
+  return settings.get_strv("vinyl-app-ids");
 }
 
 /**
@@ -331,9 +325,7 @@ export function getVinylApps(settings) {
  * @param {string[]}     ids
  */
 export function setVinylApps(settings, ids) {
-  try {
-    settings.set_strv("vinyl-app-ids", ids);
-  } catch (_e) {}
+  settings.set_strv("vinyl-app-ids", ids);
 }
 
 // Private helpers

@@ -228,15 +228,14 @@ export const MediaIndicator = GObject.registerClass(
 
         this._state._isInitializing = false;
       } catch (e) {
+        console.error(`Could not start the MPRIS manager: ${e.message}`);
         this._state._isInitializing = false;
         this._state._managerInitialized = false;
       }
     }
 
     destroy() {
-      try {
-        this._setDefaultPlayerVisible(true);
-      } catch (_e) {}
+      this._setDefaultPlayerVisible(true);
 
       this._state._sessionChanging = true;
       this._state._safetyLock = true;

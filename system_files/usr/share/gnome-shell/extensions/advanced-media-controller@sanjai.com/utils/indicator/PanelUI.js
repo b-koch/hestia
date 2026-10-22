@@ -12,54 +12,40 @@ const LOOP_PAUSE_MS = 1200;
 const ICON_FADE_MS = 120;
 
 function _isDarkTheme() {
-  try {
-    const s = new Gio.Settings({ schema_id: playerConstant.INTERFACE_SCHEMA });
-    const keys = s.list_keys();
-    if (keys.indexOf(playerConstant.INTERFACE_KEY) !== -1)
-      return s.get_string(playerConstant.INTERFACE_KEY) === "prefer-dark";
-    if (keys.indexOf(playerConstant.GTK_THEME_KEY) !== -1)
-      return s
-        .get_string(playerConstant.GTK_THEME_KEY)
-        .toLowerCase()
-        .includes("dark");
-  } catch (_) {}
+  const s = new Gio.Settings({ schema_id: playerConstant.INTERFACE_SCHEMA });
+  const keys = s.list_keys();
+  if (keys.indexOf(playerConstant.INTERFACE_KEY) !== -1)
+    return s.get_string(playerConstant.INTERFACE_KEY) === "prefer-dark";
+  if (keys.indexOf(playerConstant.GTK_THEME_KEY) !== -1)
+    return s
+      .get_string(playerConstant.GTK_THEME_KEY)
+      .toLowerCase()
+      .includes("dark");
   return true;
 }
 
 function _labelWidth(settings) {
-  try {
-    return Math.max(60, settings.get_int("panel-label-width"));
-  } catch (_) {
-    return 160;
-  }
+  return Math.max(60, settings.get_int("panel-label-width"));
 }
 /** Build a CSS style string for the panel label from appearance settings. */
 function _panelLabelStyle(settings) {
-  try {
-    const size   = settings.get_int("panel-font-size") || 13;
-    const bold   = settings.get_boolean("panel-font-bold");
-    const family = (settings.get_string("panel-font-family") || "").trim();
-    const color  = (settings.get_string("panel-font-color") || "").trim();
-    const w      = _labelWidth(settings);
+  const size   = settings.get_int("panel-font-size") || 13;
+  const bold   = settings.get_boolean("panel-font-bold");
+  const family = (settings.get_string("panel-font-family") || "").trim();
+  const color  = (settings.get_string("panel-font-color") || "").trim();
+  const w      = _labelWidth(settings);
 
-    let style = `font-size: ${size}px; font-weight: ${bold ? "bold" : "normal"};`;
-    if (family) style += ` font-family: ${family};`;
-    if (color)  style += ` color: ${color};`;
-    style += ` max-width: ${w}px;`;
-    return style;
-  } catch (_) {
-    return `font-size: 13px; max-width: ${_labelWidth(settings)}px;`;
-  }
+  let style = `font-size: ${size}px; font-weight: ${bold ? "bold" : "normal"};`;
+  if (family) style += ` font-family: ${family};`;
+  if (color)  style += ` color: ${color};`;
+  style += ` max-width: ${w}px;`;
+  return style;
 }
 
 /** Panel app-icon size from settings, defaulting to 18. */
 function _panelIconSize(settings) {
-  try {
-    const v = settings.get_int("panel-icon-size");
-    return v >= 12 ? v : 18;
-  } catch (_) {
-    return 18;
-  }
+  const v = settings.get_int("panel-icon-size");
+  return v >= 12 ? v : 18;
 }
 
 /**
@@ -70,20 +56,16 @@ function _panelIconSize(settings) {
 function _panelElementOrder(settings) {
   const DEFAULT = ["icon", "label", "controls"];
   if (!settings) return DEFAULT;
-  try {
-    const raw = settings.get_string("panel-element-order");
-    if (!raw) return DEFAULT;
-    const VALID = new Set(DEFAULT);
-    const seen = new Set();
-    const out = [];
-    for (const id of raw.split(",").map(t => t.trim()).filter(Boolean)) {
-      if (VALID.has(id) && !seen.has(id)) { out.push(id); seen.add(id); }
-    }
-    for (const id of DEFAULT) { if (!seen.has(id)) out.push(id); }
-    return out;
-  } catch (_e) {
-    return DEFAULT;
+  const raw = settings.get_string("panel-element-order");
+  if (!raw) return DEFAULT;
+  const VALID = new Set(DEFAULT);
+  const seen = new Set();
+  const out = [];
+  for (const id of raw.split(",").map(t => t.trim()).filter(Boolean)) {
+    if (VALID.has(id) && !seen.has(id)) { out.push(id); seen.add(id); }
   }
+  for (const id of DEFAULT) { if (!seen.has(id)) out.push(id); }
+  return out;
 }
 
 export class PanelUI {
@@ -168,26 +150,21 @@ export class PanelUI {
   }
 
   _watchTheme() {
-    try {
-      this._themeSettings = new Gio.Settings({
-        schema_id: playerConstant.INTERFACE_SCHEMA,
-      });
-      const keys = this._themeSettings.list_keys();
-      const key =
-        keys.indexOf(playerConstant.INTERFACE_KEY) !== -1
-          ? playerConstant.INTERFACE_KEY
-          : playerConstant.GTK_THEME_KEY;
-      this._themeSettingsId = this._themeSettings.connect(
-        `changed::${key}`,
-        () => {
-          this._dark = _isDarkTheme();
-          this._applyButtonTheme();
-        },
-      );
-    } catch (_) {
-      this._themeSettings = null;
-      this._themeSettingsId = 0;
-    }
+    this._themeSettings = new Gio.Settings({
+      schema_id: playerConstant.INTERFACE_SCHEMA,
+    });
+    const keys = this._themeSettings.list_keys();
+    const key =
+      keys.indexOf(playerConstant.INTERFACE_KEY) !== -1
+        ? playerConstant.INTERFACE_KEY
+        : playerConstant.GTK_THEME_KEY;
+    this._themeSettingsId = this._themeSettings.connect(
+      `changed::${key}`,
+      () => {
+        this._dark = _isDarkTheme();
+        this._applyButtonTheme();
+      },
+    );
   }
 
   _applyButtonTheme() {
@@ -496,26 +473,24 @@ export class PanelUI {
 
   destroy() {
     if (this._orderChangedId && this._extSettings) {
-      try { this._extSettings.disconnect(this._orderChangedId); } catch (_) {}
+      this._extSettings.disconnect(this._orderChangedId);
       this._orderChangedId = 0;
     }
 
     if (this._labelWidthChangedId && this._extSettings) {
-      try { this._extSettings.disconnect(this._labelWidthChangedId); } catch (_) {}
+      this._extSettings.disconnect(this._labelWidthChangedId);
       this._labelWidthChangedId = 0;
     }
 
     if (this._appearanceChangedIds && this._extSettings) {
       for (const id of this._appearanceChangedIds) {
-        try { this._extSettings.disconnect(id); } catch (_) {}
+        this._extSettings.disconnect(id);
       }
       this._appearanceChangedIds = [];
     }
 
     if (this._themeSettings && this._themeSettingsId) {
-      try {
-        this._themeSettings.disconnect(this._themeSettingsId);
-      } catch (_) {}
+      this._themeSettings.disconnect(this._themeSettingsId);
       this._themeSettingsId = 0;
       this._themeSettings = null;
     }

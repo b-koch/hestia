@@ -17,19 +17,50 @@ import {
   labelForId,
 } from "./helper/vinylHelpers.js";
 
+function coverCandidates(url) {
+  if (url.startsWith("file://") || url.startsWith("/")) return [url];
+
+  const best = url
+    .replace(/(i\.scdn\.co\/image\/ab67616d0000)(?:1e02|4851)/, "$1b273")
+    .replace(/(googleusercontent\.com\/.+)=w\d+-h\d+/, "$1=w1200-h1200")
+    .replace(
+      /(ytimg\.com\/vi\/[^/]+\/)(?:default|mqdefault|hqdefault|sddefault)\.jpg/,
+      "$1maxresdefault.jpg",
+    )
+    .replace(
+      /(mzstatic\.com\/.+\/)\d+x\d+bb\.(jpg|png)/,
+      (_m, dir, ext) => `${dir}1000x1000bb.${ext}`,
+    )
+    .replace(/(sndcdn\.com\/artworks-[^/]+)-(?:large|crop)\.(jpg|png)/, "$1-t500x500.$2");
+
+  return best === url ? [url] : [best, url];
+}
+
+function isCached(file) {
+  if (!file.query_exists(null)) return false;
+  const info = file.query_info("standard::size", Gio.FileQueryInfoFlags.NONE, null);
+  return info.get_size() > 0;
+}
+
+const parseRecord = (raw) => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 /** @param {Gio.Settings} settings @returns {number} */
 function _artSize(settings) {
-  try {
-    return Math.max(180, settings.get_int("popup-width"));
-  } catch (_e) {
-    return 340;
-  }
+  return Math.max(280, settings.get_int("popup-width"));
 }
 
 export const AlbumArt = GObject.registerClass(
   {
     Signals: {
-      "triple-click": {},
+      "single-click": {},
+      "cover-changed": { param_types: [GObject.TYPE_STRING] },
+      "immersive-changed": { param_types: [GObject.TYPE_BOOLEAN] },
     },
   },
   class AlbumArt extends St.BoxLayout {
@@ -42,7 +73,7 @@ export const AlbumArt = GObject.registerClass(
       this._settings = settings;
       this._manager = manager;
       this._playerName = playerName;
-      this._isDestroyed = false;
+      this._coverCancellable = null;
 
       this._coverCache = new Map();
       this._currentArtUrl = null;
@@ -51,7 +82,10 @@ export const AlbumArt = GObject.registerClass(
       this._isRotating = false;
       this._isPlaying = false;
 
-      this._vinylMode = this._isVinylEnabledForCurrentPlayer();
+      this._coverUri = null;
+      this._immersive = this._isImmersiveForCurrentPlayer();
+      this._vinylMode =
+        !this._immersive && this._isVinylEnabledForCurrentPlayer();
 
       // Multi-click detection
       this._clickCount = 0;
@@ -62,24 +96,67 @@ export const AlbumArt = GObject.registerClass(
 
       this._settingsChangedId = this._settings.connect(
         "changed::vinyl-app-ids",
-        () => {
-          if (!this._isDestroyed) this._onVinylAppsSettingChanged();
-        },
+        () => this._onVinylAppsSettingChanged(),
+      );
+
+      this._settings.connectObject(
+        "changed::immersive-cover",
+        () => this._onVinylAppsSettingChanged(),
+        "changed::immersive-app-ids",
+        () => this._onVinylAppsSettingChanged(),
+        "changed::immersive-app-disabled-ids",
+        () => this._onVinylAppsSettingChanged(),
+        "changed::cover-cache-version",
+        () => this._onCoverCacheCleared(),
+        this,
       );
 
       // Resize every UI element when the user changes popup-width
       this._sizeChangedId = this._settings.connect(
         "changed::popup-width",
-        () => {
-          if (!this._isDestroyed) this._applySize();
-        },
+        () => this._applySize(),
       );
     }
 
     setPlayer(manager, playerName) {
       this._manager = manager;
       this._playerName = playerName;
-      if (!this._isDestroyed) this._onVinylAppsSettingChanged();
+      this._onVinylAppsSettingChanged();
+    }
+
+    get immersive() {
+      return this._immersive;
+    }
+
+    get coverUri() {
+      return this._coverUri;
+    }
+
+    _emitCover(uri) {
+      this._coverUri = uri;
+      this.emit("cover-changed", uri ?? "");
+    }
+
+    _isImmersiveForCurrentPlayer() {
+      const ids = resolveCanonicalIds(this._playerName, this._manager);
+      if (
+        isVinylEnabledForIds(
+          ids,
+          this._settings.get_strv("immersive-app-disabled-ids"),
+        )
+      )
+        return false;
+      if (
+        isVinylEnabledForIds(ids, this._settings.get_strv("immersive-app-ids"))
+      )
+        return true;
+      return this._settings.get_boolean("immersive-cover");
+    }
+
+    _onCoverCacheCleared() {
+      this._coverCache.clear();
+      if (this._currentArtUrl) this.loadCover(this._currentArtUrl, true);
+      else this.setDefaultCover();
     }
 
     //  Per-app vinyl helpers
@@ -136,49 +213,47 @@ export const AlbumArt = GObject.registerClass(
      * @returns {Gio.AppInfo|null}
      */
     _resolveAppInfo() {
-      try {
-        const candidates = _buildCandidateTokens(
-          this._playerName,
-          this._manager,
-        );
+      const candidates = _buildCandidateTokens(
+        this._playerName,
+        this._manager,
+      );
 
-        const allApps = Gio.AppInfo.get_all();
+      const allApps = Gio.AppInfo.get_all();
 
-        for (const app of allApps) {
-          const rawId = app.get_id() ?? "";
-          const lower = rawId.toLowerCase();
-          const noSuffix = lower.endsWith(".desktop")
-            ? lower.slice(0, -8)
-            : lower;
-          if (candidates.exact.has(lower) || candidates.exact.has(noSuffix))
-            return app;
+      for (const app of allApps) {
+        const rawId = app.get_id() ?? "";
+        const lower = rawId.toLowerCase();
+        const noSuffix = lower.endsWith(".desktop")
+          ? lower.slice(0, -8)
+          : lower;
+        if (candidates.exact.has(lower) || candidates.exact.has(noSuffix))
+          return app;
+      }
+
+      //  segment match (handles reverse-DNS like org.videolan.vlc)
+      for (const app of allApps) {
+        const rawId = app.get_id() ?? "";
+        const lower = rawId.toLowerCase();
+        const noSuffix = lower.endsWith(".desktop")
+          ? lower.slice(0, -8)
+          : lower;
+        for (const seg of noSuffix.split(".")) {
+          if (seg.length > 2 && candidates.segments.has(seg)) return app;
         }
+      }
 
-        //  segment match (handles reverse-DNS like org.videolan.vlc)
-        for (const app of allApps) {
-          const rawId = app.get_id() ?? "";
-          const lower = rawId.toLowerCase();
-          const noSuffix = lower.endsWith(".desktop")
-            ? lower.slice(0, -8)
-            : lower;
-          for (const seg of noSuffix.split(".")) {
-            if (seg.length > 2 && candidates.segments.has(seg)) return app;
-          }
-        }
-
-        // display-name / first-word match
-        for (const app of allApps) {
-          const name = (app.get_display_name() ?? "")
-            .toLowerCase()
-            .replace(/\s+/g, "");
-          if (name && candidates.segments.has(name)) return app;
-          const first = (app.get_display_name() ?? "")
-            .toLowerCase()
-            .split(/\s+/)[0];
-          if (first && first.length > 2 && candidates.segments.has(first))
-            return app;
-        }
-      } catch (_e) {}
+      // display-name / first-word match
+      for (const app of allApps) {
+        const name = (app.get_display_name() ?? "")
+          .toLowerCase()
+          .replace(/\s+/g, "");
+        if (name && candidates.segments.has(name)) return app;
+        const first = (app.get_display_name() ?? "")
+          .toLowerCase()
+          .split(/\s+/)[0];
+        if (first && first.length > 2 && candidates.segments.has(first))
+          return app;
+      }
       return null;
     }
 
@@ -206,6 +281,39 @@ export const AlbumArt = GObject.registerClass(
           list.push(preferred);
         setVinylApps(this._settings, list);
         this._saveInstance(preferred);
+      }
+    }
+
+    _toggleImmersiveForCurrentPlayer() {
+      const ids = resolveCanonicalIds(this._playerName, this._manager);
+
+      if (ids.size === 0) {
+        const cur = this._settings.get_boolean("immersive-cover");
+        this._settings.set_boolean("immersive-cover", !cur);
+        return;
+      }
+
+      const without = (list) =>
+        list.filter((id) => !isVinylEnabledForIds(ids, [id]));
+      const enabled = this._settings.get_strv("immersive-app-ids");
+      const disabled = this._settings.get_strv("immersive-app-disabled-ids");
+      const target = this._resolvePreferredId() ?? [...ids][0];
+
+      if (this._immersive) {
+        this._settings.set_strv("immersive-app-ids", without(enabled));
+        this._settings.set_strv("immersive-app-disabled-ids", [
+          ...without(disabled),
+          target,
+        ]);
+      } else {
+        this._settings.set_strv(
+          "immersive-app-disabled-ids",
+          without(disabled),
+        );
+        this._settings.set_strv("immersive-app-ids", [
+          ...without(enabled),
+          target,
+        ]);
       }
     }
 
@@ -273,76 +381,74 @@ export const AlbumArt = GObject.registerClass(
         }),
       });
 
-      try {
-        const existing = this._settings.get_strv("vinyl-app-instances") ?? [];
+      const existing = this._settings.get_strv("vinyl-app-instances");
 
-        let preservedCustomName = null;
-        let preservedEnabled = true;
+      let preservedCustomName = null;
+      let preservedEnabled = true;
 
-        const deduped = existing.filter((raw) => {
-          try {
-            const obj = JSON.parse(raw);
-            const storedId = (obj.id ?? "").toLowerCase();
-            const storedDesktop = (obj.desktopId ?? "").toLowerCase();
+      const deduped = existing.filter((raw) => {
+        const obj = parseRecord(raw);
+        if (!obj) return true;
 
-            const isComposite = canonicalLower.includes("--");
-            let isMatch;
-            if (isComposite) {
-              isMatch = storedId === canonicalLower;
-            } else {
-              const storedTail = storedId.split(".").pop();
-              isMatch =
-                storedId === canonicalLower ||
-                storedDesktop === canonicalLower ||
-                storedTail === canonicalTail ||
-                storedId === canonicalTail;
-            }
+        const storedId = (obj.id ?? "").toLowerCase();
+        const storedDesktop = (obj.desktopId ?? "").toLowerCase();
 
-            if (isMatch) {
-              if (obj.customName) preservedCustomName = obj.customName;
-              if (typeof obj.enabled === "boolean")
-                preservedEnabled = obj.enabled;
-              return false;
-            }
-            return true;
-          } catch (_) {
-            return true;
-          }
-        });
+        const isComposite = canonicalLower.includes("--");
+        let isMatch;
+        if (isComposite) {
+          isMatch = storedId === canonicalLower;
+        } else {
+          const storedTail = storedId.split(".").pop();
+          isMatch =
+            storedId === canonicalLower ||
+            storedDesktop === canonicalLower ||
+            storedTail === canonicalTail ||
+            storedId === canonicalTail;
+        }
 
-        const finalRecord = JSON.parse(record);
-        if (preservedCustomName) finalRecord.customName = preservedCustomName;
-        finalRecord.enabled = preservedEnabled;
+        if (isMatch) {
+          if (obj.customName) preservedCustomName = obj.customName;
+          if (typeof obj.enabled === "boolean") preservedEnabled = obj.enabled;
+          return false;
+        }
+        return true;
+      });
 
-        deduped.push(JSON.stringify(finalRecord));
-        this._settings.set_strv("vinyl-app-instances", deduped);
-      } catch (_e) {}
+      const finalRecord = JSON.parse(record);
+      if (preservedCustomName) finalRecord.customName = preservedCustomName;
+      finalRecord.enabled = preservedEnabled;
+
+      deduped.push(JSON.stringify(finalRecord));
+      this._settings.set_strv("vinyl-app-instances", deduped);
     }
 
     _markInstanceEnabled(canonicalIds, enabledValue) {
-      try {
-        const existing = this._settings.get_strv("vinyl-app-instances") ?? [];
-        const updated = existing.map((raw) => {
-          try {
-            const obj = JSON.parse(raw);
-            const lower = (obj.id ?? "").toLowerCase();
-            const match =
-              canonicalIds.has(lower) ||
-              canonicalIds.has(lower.split(".").pop());
-            if (match) return JSON.stringify({ ...obj, enabled: enabledValue });
-          } catch (_) {}
-          return raw;
+      const updated = this._settings
+        .get_strv("vinyl-app-instances")
+        .map((raw) => {
+          const obj = parseRecord(raw);
+          if (!obj) return raw;
+
+          const lower = (obj.id ?? "").toLowerCase();
+          const match =
+            canonicalIds.has(lower) || canonicalIds.has(lower.split(".").pop());
+          return match
+            ? JSON.stringify({ ...obj, enabled: enabledValue })
+            : raw;
         });
-        this._settings.set_strv("vinyl-app-instances", updated);
-      } catch (_e) {}
+      this._settings.set_strv("vinyl-app-instances", updated);
     }
 
     _onVinylAppsSettingChanged() {
-      const newVinyl = this._isVinylEnabledForCurrentPlayer();
-      if (newVinyl === this._vinylMode) return;
+      const newImmersive = this._isImmersiveForCurrentPlayer();
+      const newVinyl = !newImmersive && this._isVinylEnabledForCurrentPlayer();
+      if (newVinyl === this._vinylMode && newImmersive === this._immersive)
+        return;
 
       const wasPlaying = this._isPlaying;
+      const immersiveChanged = newImmersive !== this._immersive;
       this._vinylMode = newVinyl;
+      this._immersive = newImmersive;
 
       this.stopRotation();
       this._updateMode();
@@ -350,6 +456,7 @@ export const AlbumArt = GObject.registerClass(
       if (this._currentArtUrl) this.loadCover(this._currentArtUrl, true);
 
       if (this._vinylMode && wasPlaying) this.startRotation(true);
+      if (immersiveChanged) this.emit("immersive-changed", newImmersive);
     }
 
     //  Build UI
@@ -559,15 +666,13 @@ export const AlbumArt = GObject.registerClass(
       const now = GLib.get_monotonic_time();
       const elapsedMs = (now - this._lastClickTime) / 1000;
 
-      let vinylClicks = 2;
-      let lyricsClicks = 3;
-      try {
-        vinylClicks = this._settings.get_int("vinyl-click-count");
-        lyricsClicks = this._settings.get_int("lyrics-click-count");
-      } catch (_e) {}
+      let vinylClicks = this._settings.get_int("vinyl-click-count");
+      let lyricsClicks = this._settings.get_int("lyrics-click-count");
+      let immersiveClicks = this._settings.get_int("immersive-click-count");
 
       vinylClicks = Math.max(1, Math.min(5, vinylClicks));
       lyricsClicks = Math.max(1, Math.min(5, lyricsClicks));
+      immersiveClicks = Math.max(1, Math.min(5, immersiveClicks));
 
       if (this._lastClickTime > 0 && elapsedMs < MULTI_CLICK_MS) {
         this._clickCount++;
@@ -582,13 +687,18 @@ export const AlbumArt = GObject.registerClass(
       }
 
       const count = this._clickCount;
-      const maxThreshold = Math.max(vinylClicks, lyricsClicks);
+      const maxThreshold = Math.max(vinylClicks, lyricsClicks, immersiveClicks);
 
       if (count >= maxThreshold) {
         this._clickTimeout = null;
         this._clickCount = 0;
         this._lastClickTime = 0;
-        this._dispatchClickAction(count, vinylClicks, lyricsClicks);
+        this._dispatchClickAction(
+          count,
+          vinylClicks,
+          lyricsClicks,
+          immersiveClicks,
+        );
         return;
       }
 
@@ -599,21 +709,31 @@ export const AlbumArt = GObject.registerClass(
           this._clickTimeout = null;
           this._clickCount = 0;
           this._lastClickTime = 0;
-          this._dispatchClickAction(count, vinylClicks, lyricsClicks);
+          this._dispatchClickAction(
+            count,
+            vinylClicks,
+            lyricsClicks,
+            immersiveClicks,
+          );
           return GLib.SOURCE_REMOVE;
         },
       );
     }
 
-    _dispatchClickAction(count, vinylClicks, lyricsClicks) {
+    _dispatchClickAction(count, vinylClicks, lyricsClicks, immersiveClicks) {
       if (count === lyricsClicks) {
-        this.emit("triple-click"); // signal name kept for backward-compat
-      } else if (count === vinylClicks) {
+        this.emit("single-click"); // signal name kept for backward-compat
+      } else if (count === immersiveClicks) {
+        this._toggleImmersiveForCurrentPlayer();
+      } else if (count === vinylClicks && !this._immersive) {
         this._toggleVinylForCurrentPlayer();
       }
     }
 
     _updateMode() {
+      const margin = this._immersive ? 0 : 24;
+      this.style = `margin-bottom: ${margin}px;`;
+      this._normalContainer.style = `margin-bottom: ${margin}px;`;
       if (this._vinylMode) {
         this._normalContainer.hide();
         this._vinylContainer.show();
@@ -621,6 +741,7 @@ export const AlbumArt = GObject.registerClass(
         this._vinylContainer.hide();
         this._normalContainer.show();
       }
+      this._normalContainer.opacity = this._immersive ? 0 : 255;
     }
 
     // Vinyl disc drawing
@@ -733,15 +854,24 @@ export const AlbumArt = GObject.registerClass(
       this._coverCache.set(imageUrl, {
         normal: normalStyle,
         vinyl: vinylStyle,
+        uri: imageUrl,
       });
+      this._emitCover(imageUrl);
     }
 
     _applyCoverStyle(styles) {
       this._normalCoverImage.style = styles.normal;
       this._vinylCoverImage.style = styles.vinyl;
+      this._emitCover(styles.uri);
     }
 
     _downloadCover(url) {
+      this._coverCancellable?.cancel();
+      this._coverCancellable = new Gio.Cancellable();
+      this._fetchCover(coverCandidates(url), this._coverCancellable);
+    }
+
+    _fetchCover([url, ...fallbacks], cancellable) {
       const hash = GLib.compute_checksum_for_string(
         GLib.ChecksumType.MD5,
         url,
@@ -755,7 +885,7 @@ export const AlbumArt = GObject.registerClass(
       const cachePath = GLib.build_filenamev([cacheDir, hash]);
       const cacheFile = Gio.File.new_for_path(cachePath);
 
-      if (cacheFile.query_exists(null)) {
+      if (isCached(cacheFile)) {
         this._setCoverImage(`file://${cachePath}`);
         return;
       }
@@ -766,14 +896,17 @@ export const AlbumArt = GObject.registerClass(
         cacheFile,
         Gio.FileCopyFlags.OVERWRITE,
         GLib.PRIORITY_LOW,
-        null,
+        cancellable,
         null,
         (src, res) => {
-          if (this._isDestroyed) return;
           try {
             src.copy_finish(res);
-            this._setCoverImage(`file://${cachePath}`);
-          } catch (e) {}
+          } catch {
+            if (!cancellable.is_cancelled() && fallbacks.length)
+              this._fetchCover(fallbacks, cancellable);
+            return;
+          }
+          this._setCoverImage(`file://${cachePath}`);
         },
       );
     }
@@ -797,6 +930,7 @@ export const AlbumArt = GObject.registerClass(
         background-repeat: no-repeat;
         background-image: ${ph}; opacity: 0.3;
       `;
+      this._emitCover(null);
     }
 
     //  Rotation
@@ -827,7 +961,7 @@ export const AlbumArt = GObject.registerClass(
         GLib.PRIORITY_LOW,
         interval,
         () => {
-          if (this._isDestroyed || !this._isRotating) return GLib.SOURCE_REMOVE;
+          if (!this._isRotating) return GLib.SOURCE_REMOVE;
           this._rotationAngle = (this._rotationAngle + degPerInterval) % 360;
           if (this._rotatingContainer)
             this._rotatingContainer.rotation_angle_z = this._rotationAngle;
@@ -863,8 +997,7 @@ export const AlbumArt = GObject.registerClass(
      * @param {number} ratio  0.0–1.0  currentPosition / trackLength
      */
     syncRotationToPosition(ratio) {
-      if (this._isDestroyed || !this._vinylMode || !this._rotatingContainer)
-        return;
+      if (!this._vinylMode || !this._rotatingContainer) return;
 
       // Only override the angle while the user is actively scrubbing
       if (this._isRotating) return;
@@ -875,7 +1008,8 @@ export const AlbumArt = GObject.registerClass(
     }
 
     destroy() {
-      this._isDestroyed = true;
+      this._coverCancellable?.cancel();
+      this._coverCancellable = null;
 
       this.stopRotation();
 
@@ -894,6 +1028,7 @@ export const AlbumArt = GObject.registerClass(
         this._settings.disconnect(this._sizeChangedId);
         this._sizeChangedId = 0;
       }
+      this._settings.disconnectObject(this);
 
       this._normalButton?.disconnectObject(this);
       this._vinylButton?.disconnectObject(this);

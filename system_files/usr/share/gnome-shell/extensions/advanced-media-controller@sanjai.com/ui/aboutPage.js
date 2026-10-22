@@ -2,24 +2,12 @@ import Adw from "gi://Adw";
 import Gtk from "gi://Gtk";
 import Gio from "gi://Gio";
 import Gdk from "gi://Gdk";
-import GdkPixbuf from "gi://GdkPixbuf";
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 function _imageFromFile(path, size) {
-  try {
-    const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-      path,
-      size,
-      size,
-      true,
-    );
-    return Gtk.Image.new_from_pixbuf(pixbuf);
-  } catch (_e) {
-    return new Gtk.Image({
-      icon_name: "emblem-favorite-symbolic",
-      pixel_size: size,
-    });
-  }
+  const image = Gtk.Image.new_from_file(path);
+  image.pixel_size = size;
+  return image;
 }
 
 function _createKofiIcon(extensionDirPath, size = 20) {
@@ -82,11 +70,6 @@ export function createAboutPage(extensionDirPath, settings) {
     icon_name: "help-about-symbolic",
   });
 
-  const _signalIds = [];
-  const _trackConnect = (obj, signal, fn) => {
-    _signalIds.push({ obj, id: obj.connect(signal, fn) });
-  };
-
   const resetGroup = new Adw.PreferencesGroup({
     title: _("Danger Zone"),
     description: _("Reset extension settings to their default values"),
@@ -105,7 +88,7 @@ export function createAboutPage(extensionDirPath, settings) {
     label: _("Reset"),
   });
 
-  _trackConnect(resetBtn, "clicked", () => {
+  resetBtn.connect("clicked", () => {
     const dialog = new Adw.AlertDialog({
       heading: _("Reset Settings?"),
       body: _(
@@ -146,16 +129,10 @@ export function createAboutPage(extensionDirPath, settings) {
   });
 
   const logoPath = `${extensionDirPath}/icons/media-logo.png`;
-  let logoImage;
-  try {
-    logoImage = Gtk.Image.new_from_file(logoPath);
-    logoImage.set_pixel_size(72);
-  } catch (_e) {
-    logoImage = new Gtk.Image({
-      icon_name: "multimedia-player-symbolic",
-      pixel_size: 72,
-    });
-  }
+  const logoImage = Gio.File.new_for_path(logoPath).query_exists(null)
+    ? Gtk.Image.new_from_file(logoPath)
+    : new Gtk.Image({ icon_name: "multimedia-player-symbolic" });
+  logoImage.pixel_size = 72;
 
   const infoBox = new Gtk.Box({
     orientation: Gtk.Orientation.VERTICAL,
@@ -171,7 +148,7 @@ export function createAboutPage(extensionDirPath, settings) {
   );
   infoBox.append(
     new Gtk.Label({
-      label: _("Version 6.5"),
+      label: _("Version 6.6"),
       halign: Gtk.Align.START,
       css_classes: ["caption"],
     }),
@@ -205,13 +182,8 @@ export function createAboutPage(extensionDirPath, settings) {
   codebergRow.add_suffix(
     new Gtk.Image({ icon_name: "adw-external-link-symbolic", pixel_size: 16 }),
   );
-  _trackConnect(codebergRow, "activated", () => {
-    try {
-      Gio.AppInfo.launch_default_for_uri(
-        "https://codeberg.org/sanjai-shaarugesh/Advanced-media-controller",
-        null,
-      );
-    } catch (e) {}
+  codebergRow.connect("activated", () => {
+    Gtk.show_uri(page.get_root(), "https://codeberg.org/sanjai-shaarugesh/Advanced-media-controller", Gdk.CURRENT_TIME);
   });
 
   const DONATION_OPTIONS = [
@@ -280,16 +252,11 @@ export function createAboutPage(extensionDirPath, settings) {
 
   const loadQr = (filename) => {
     const path = `${extensionDirPath}/icons/${filename}`;
-    try {
-      const img = Gtk.Image.new_from_file(path);
-      img.set_pixel_size(200);
-      return img;
-    } catch (_e) {
-      return new Gtk.Image({
-        icon_name: "camera-web-symbolic",
-        pixel_size: 200,
-      });
-    }
+    const img = Gio.File.new_for_path(path).query_exists(null)
+      ? Gtk.Image.new_from_file(path)
+      : new Gtk.Image({ icon_name: "camera-web-symbolic" });
+    img.pixel_size = 200;
+    return img;
   };
 
   let qrImage = loadQr(DONATION_OPTIONS[0].qrFile);
@@ -312,7 +279,7 @@ export function createAboutPage(extensionDirPath, settings) {
   addressRow.add_suffix(
     new Gtk.Image({ icon_name: "edit-copy-symbolic", pixel_size: 16 }),
   );
-  _trackConnect(addressRow, "activated", () =>
+  addressRow.connect("activated", () =>
     _copyToClipboard(addressRow.title, _("Donation address")),
   );
 
@@ -341,7 +308,7 @@ export function createAboutPage(extensionDirPath, settings) {
     if (qrPlatformRow.selected !== idx) qrPlatformRow.selected = idx;
   };
 
-  _trackConnect(qrPlatformRow, "notify::selected", () => {
+  qrPlatformRow.connect("notify::selected", () => {
     switchDonation(qrPlatformRow.selected);
   });
 
@@ -359,11 +326,9 @@ export function createAboutPage(extensionDirPath, settings) {
   kofiRow.add_suffix(
     new Gtk.Image({ icon_name: "adw-external-link-symbolic", pixel_size: 16 }),
   );
-  _trackConnect(kofiRow, "activated", () => {
+  kofiRow.connect("activated", () => {
     switchDonation(0);
-    try {
-      Gio.AppInfo.launch_default_for_uri(DONATION_OPTIONS[0].url, null);
-    } catch (e) {}
+    Gtk.show_uri(page.get_root(), DONATION_OPTIONS[0].url, Gdk.CURRENT_TIME);
   });
 
   const liberapayRow = new Adw.ActionRow({
@@ -375,11 +340,9 @@ export function createAboutPage(extensionDirPath, settings) {
   liberapayRow.add_suffix(
     new Gtk.Image({ icon_name: "adw-external-link-symbolic", pixel_size: 16 }),
   );
-  _trackConnect(liberapayRow, "activated", () => {
+  liberapayRow.connect("activated", () => {
     switchDonation(1);
-    try {
-      Gio.AppInfo.launch_default_for_uri(DONATION_OPTIONS[1].url, null);
-    } catch (e) {}
+    Gtk.show_uri(page.get_root(), DONATION_OPTIONS[1].url, Gdk.CURRENT_TIME);
   });
 
   const buymeacoffeeRow = new Adw.ActionRow({
@@ -391,11 +354,9 @@ export function createAboutPage(extensionDirPath, settings) {
   buymeacoffeeRow.add_suffix(
     new Gtk.Image({ icon_name: "adw-external-link-symbolic", pixel_size: 16 }),
   );
-  _trackConnect(buymeacoffeeRow, "activated", () => {
+  buymeacoffeeRow.connect("activated", () => {
     switchDonation(2);
-    try {
-      Gio.AppInfo.launch_default_for_uri(DONATION_OPTIONS[2].url, null);
-    } catch (e) {}
+    Gtk.show_uri(page.get_root(), DONATION_OPTIONS[2].url, Gdk.CURRENT_TIME);
   });
 
   const licenseGroup = new Adw.PreferencesGroup({
@@ -425,7 +386,7 @@ export function createAboutPage(extensionDirPath, settings) {
     subtitle: _(
       "\u2022 Multi-instance browser support\n\u2022 Per-app rotating vinyl record album art\n" +
         "\u2022 Animated tonearm\n\u2022 Smooth animations\n\u2022 Double-click to toggle vinyl per app\n" +
-        "\u2022 Triple-click album art to show synced lyrics\n" +
+        "\u2022 Single-click album art to show synced lyrics\n" +
         "\u2022 Single-click lyrics panel to return to album art\n" +
         "\u2022 Lyrics synced to playback via lrclib.net\n" +
         "\u2022 Per-player lyrics toggle (each tab independent)\n" +
@@ -455,15 +416,6 @@ export function createAboutPage(extensionDirPath, settings) {
   page.add(addressGroup);
   page.add(licenseGroup);
   page.add(resetGroup);
-
-  page.connect("destroy", () => {
-    for (const { obj, id } of _signalIds) {
-      try {
-        obj.disconnect(id);
-      } catch (_) {}
-    }
-    _signalIds.length = 0;
-  });
 
   return page;
 }

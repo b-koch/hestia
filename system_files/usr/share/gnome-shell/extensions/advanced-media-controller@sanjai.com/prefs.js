@@ -13,48 +13,135 @@ import { buildAppearancePage } from "./ui/appearancePage.js";
 import { buildPlayerFilterPage } from "./ui/playerFilterPage.js";
 import { buildLyricsPage } from "./ui/lyricsPage.js";
 import { buildVinylAppsPage } from "./ui/vinylAppsPage.js";
+import { buildImmersiveAppsPage } from "./ui/immersiveAppsPage.js";
 import { createAboutPage } from "./ui/aboutPage.js";
+import { buildProgressBarPage } from "./ui/themes/progressBarPage.js";
+import { presentDialog } from "./ui/themes/helpers/widgets.js";
+
+const BROWSER_IDS = new Set([
+  "google-chrome",
+  "google-chrome-stable",
+  "google-chrome-beta",
+  "chromium",
+  "chromium-browser",
+  "brave-browser",
+  "com.brave.Browser",
+  "brave-browser-stable",
+  "firefox",
+  "org.mozilla.firefox",
+  "firefox-esr",
+  "microsoft-edge",
+  "microsoft-edge-stable",
+  "microsoft-edge-beta",
+  "com.microsoft.Edge",
+  "vivaldi-stable",
+  "vivaldi",
+  "opera",
+  "opera-stable",
+  "com.opera.Opera",
+  "epiphany",
+  "org.gnome.Epiphany",
+  "midori",
+  "falkon",
+]);
+
+const MEDIA_CATEGORIES = [
+  "audio",
+  "music",
+  "video",
+  "player",
+  "multimedia",
+  "media",
+];
+
+const GENERIC_TOKENS = [
+  "org",
+  "com",
+  "net",
+  "io",
+  "app",
+  "application",
+  "browser",
+  "client",
+  "player",
+  "media",
+  "desktop",
+  "instance",
+  "snap",
+  "flatpak",
+];
+
+const parseInstance = (raw) => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const stripDesktop = (id) => id.replace(/\.desktop$/, "");
+
+const sameBrowserSource = (idA, idB) => {
+  const a = parseBrowserSourceId(idA);
+  const b = parseBrowserSourceId(idB);
+  return Boolean(
+    a &&
+    b &&
+    a.source === b.source &&
+    (a.browser === b.browser ||
+      a.browser.includes(b.browser) ||
+      b.browser.includes(a.browser)),
+  );
+};
+
+const appImage = (gicon, size) =>
+  new Gtk.Image({
+    ...(gicon ? { gicon } : { icon_name: "media-optical-cd-audio-symbolic" }),
+    pixel_size: size,
+    valign: Gtk.Align.CENTER,
+  });
+
+const sectionLabel = (text, marginTop) =>
+  new Gtk.Label({
+    label: text,
+    xalign: 0,
+    css_classes: ["caption", "dim-label"],
+    margin_top: marginTop,
+    margin_bottom: 2,
+    margin_start: 8,
+  });
 
 export default class MediaControlsPreferences extends ExtensionPreferences {
   fillPreferencesWindow(window) {
     const settings = this.getSettings();
 
     window.set_title(_("Advanced Media Controller"));
-    window.set_default_size(700, 760);
+    window.set_default_size(800, 760);
     window.set_resizable(true);
 
-    // General page
     window.add(buildGeneralPage(settings));
-
-    //  Popup Player page
     window.add(buildPopupPage(settings));
-
-    //  Appearance page (fonts, colours, icon sizes)
     window.add(buildAppearancePage(settings));
 
-    //  Vinyl Apps page
     const vinylPage = new Adw.PreferencesPage({
       title: _("Vinyl Apps"),
       icon_name: "media-optical-cd-audio-symbolic",
     });
     window.add(vinylPage);
 
-    const vinylHelpers = {
-      findAppInfo: (desktopId, fallbackId) =>
-        this._findAppInfo(desktopId, fallbackId),
-      normalizeAppId: (id) => this._normalizeAppId(id),
-      buildMatchSet: (appId) => this._buildMatchSet(appId),
-      isAppEnabled: (normId, vinylIds) => this._isAppEnabled(normId, vinylIds),
-      setAppVinylState: (s, appId, normId, enable) =>
-        this._setAppVinylState(s, appId, normId, enable),
-      updateInstanceEnabledField: (s, normId, value) =>
-        this._updateInstanceEnabledField(s, normId, value),
-      deleteInstance: (s, id, normId) => this._deleteInstance(s, id, normId),
-      loadMediaAndBrowserApps: () => this._loadMediaAndBrowserApps(),
-      renderAppList: (filteredApps, s) => this._renderAppList(filteredApps, s),
-      refreshInstancesList: (s) => this._refreshInstancesList(s),
-      showRenameDialog: (s, id, normId, currentDisplay, resolvedName) =>
-        this._showRenameDialog(s, id, normId, currentDisplay, resolvedName),
+    // the page fills in the four widget fields itself
+    this._vinylHelpers = {
+      findAppInfo: this._findAppInfo.bind(this),
+      normalizeAppId: this._normalizeAppId.bind(this),
+      buildMatchSet: this._buildMatchSet.bind(this),
+      isAppEnabled: this._isAppEnabled.bind(this),
+      setAppVinylState: this._setAppVinylState.bind(this),
+      updateInstanceEnabledField: this._updateInstanceEnabledField.bind(this),
+      deleteInstance: this._deleteInstance.bind(this),
+      loadMediaAndBrowserApps: this._loadMediaAndBrowserApps.bind(this),
+      renderAppList: this._renderAppList.bind(this),
+      refreshInstancesList: this._refreshInstancesList.bind(this),
+      showRenameDialog: this._showRenameDialog.bind(this),
 
       instancesGroup: null,
       instanceRows: null,
@@ -62,22 +149,22 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
       allApps: null,
       currentSearchQuery: "",
     };
+    buildVinylAppsPage(vinylPage, settings, this._vinylHelpers);
 
-    this._vinylHelpers = vinylHelpers;
+    const immersivePage = new Adw.PreferencesPage({
+      title: _("Immersive"),
+      icon_name: "view-fullscreen-symbolic",
+    });
+    window.add(immersivePage);
+    buildImmersiveAppsPage(immersivePage, settings);
 
-    buildVinylAppsPage(vinylPage, settings, vinylHelpers);
-
-    //  Player Filter page
     const filterPage = new Adw.PreferencesPage({
       title: _("Player Filter"),
       icon_name: "view-list-symbolic",
     });
     window.add(filterPage);
-    buildPlayerFilterPage(filterPage, settings, (desktopId, fallbackId) =>
-      this._findAppInfo(desktopId, fallbackId),
-    );
+    buildPlayerFilterPage(filterPage, settings, this._findAppInfo.bind(this));
 
-    //  Lyrics page
     const lyricsPage = new Adw.PreferencesPage({
       title: _("Lyrics"),
       icon_name: "audio-x-generic-symbolic",
@@ -85,11 +172,15 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
     window.add(lyricsPage);
     buildLyricsPage(lyricsPage, settings);
 
-    // About page
+    const progressPage = new Adw.PreferencesPage({
+      title: _("Progress Bar"),
+      icon_name: "media-seek-forward-symbolic",
+    });
+    window.add(progressPage);
+    buildProgressBarPage(progressPage, settings, this.dir.get_path());
+
     window.add(createAboutPage(this.dir.get_path(), settings));
   }
-
-  //  Vinyl App Helpers
 
   _refreshInstancesList(settings) {
     const { instancesGroup, instanceRows } = this._vinylHelpers;
@@ -97,140 +188,91 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
     for (const row of instanceRows.values()) instancesGroup.remove(row);
     instanceRows.clear();
 
-    const rawInstances = settings.get_strv("vinyl-app-instances") ?? [];
-
-    const enabledIds = settings.get_strv("vinyl-app-ids");
+    const rawInstances = settings.get_strv("vinyl-app-instances");
 
     if (rawInstances.length === 0) {
-      const ph = new Adw.ActionRow({
+      const placeholder = new Adw.ActionRow({
         title: _("No instances saved yet"),
         subtitle: _(
           "Double-click the album art in the popup while music is playing to save an instance here.",
         ),
         activatable: false,
       });
-      ph.add_prefix(
-        new Gtk.Image({
-          icon_name: "media-optical-cd-audio-symbolic",
-          pixel_size: 28,
-          valign: Gtk.Align.CENTER,
-          opacity: 0.4,
-        }),
-      );
-      instanceRows.set("__placeholder__", ph);
-      instancesGroup.add(ph);
+      const icon = appImage(null, 28);
+      icon.opacity = 0.4;
+      placeholder.add_prefix(icon);
+      instanceRows.set("__placeholder__", placeholder);
+      instancesGroup.add(placeholder);
       return;
     }
 
-    const parsed = [];
+    const groups = new Map();
     for (const raw of rawInstances) {
-      let obj;
-      try {
-        obj = JSON.parse(raw);
-      } catch (_) {
+      const obj = parseInstance(raw);
+      if (!obj?.id) continue;
+
+      const idLower = obj.id.toLowerCase();
+      let appInfo = null;
+      let key;
+
+      if (idLower.includes("--")) {
+        key = idLower;
+      } else {
+        appInfo = this._findAppInfo(obj.desktopId || obj.id, obj.id);
+        key = appInfo
+          ? stripDesktop(appInfo.get_id() ?? "").toLowerCase() || idLower
+          : idLower.replace(/\.instance[_\d]+$/i, "").replace(/\.\d+$/, "");
+      }
+
+      const entry = { obj, appInfo };
+      const group = groups.get(key);
+      if (!group) {
+        groups.set(key, { best: entry, allIds: new Set([idLower]) });
         continue;
       }
-      const id = obj.id ?? "";
-      if (!id) continue;
 
-      const idLower = id.toLowerCase();
-      const isComposite = idLower.includes("--");
-
-      let appInfoR = null;
-      let canonicalKey;
-
-      if (isComposite) {
-        canonicalKey = idLower;
-        appInfoR = null;
-      } else {
-        appInfoR = this._findAppInfo(obj.desktopId || id, id);
-        if (appInfoR) {
-          const realId = (appInfoR.get_id() ?? "").replace(/\.desktop$/i, "");
-          canonicalKey = realId.toLowerCase() || idLower;
-        } else {
-          canonicalKey = idLower
-            .replace(/\.instance[_\d]+$/i, "")
-            .replace(/\.\d+$/, "");
-        }
-      }
-      parsed.push({ obj, appInfoR, canonicalKey });
+      group.allIds.add(idLower);
+      if (!group.best.obj.enabled && obj.enabled) group.best = entry;
     }
 
-    const groupMap = new Map();
-    for (const entry of parsed) {
-      const { canonicalKey } = entry;
-      if (groupMap.has(canonicalKey)) {
-        const group = groupMap.get(canonicalKey);
-        group.allIds.add(entry.obj.id.toLowerCase());
-        if (!group.best.obj.enabled && entry.obj.enabled) group.best = entry;
-      } else {
-        groupMap.set(canonicalKey, {
-          best: entry,
-          allIds: new Set([entry.obj.id.toLowerCase()]),
-        });
-      }
-    }
+    const enabledIds = settings.get_strv("vinyl-app-ids");
 
-    for (const [, { best, allIds }] of groupMap) {
-      const { obj, appInfoR } = best;
-      const id = obj.id ?? "";
+    for (const { best, allIds } of groups.values()) {
+      const { obj, appInfo } = best;
+      const id = obj.id;
       const normId = id.toLowerCase();
-
-      const parsedComposite = parseBrowserSourceId(normId);
-      const isBrowserInstance = parsedComposite !== null;
+      const composite = parseBrowserSourceId(normId);
 
       let appName = obj.name || obj.desktopId || id;
-      let appIcon = null;
+      let icon = null;
 
-      if (isBrowserInstance) {
+      if (composite) {
         appName = labelForId(normId);
-        const browserDesktopId = obj.desktopId || parsedComposite.browser;
-        const browserAppInfo = this._findAppInfo(
-          browserDesktopId,
-          browserDesktopId,
-        );
-        if (browserAppInfo) appIcon = browserAppInfo.get_icon();
-      } else if (appInfoR) {
-        appName = appInfoR.get_display_name() || appInfoR.get_name() || appName;
-        appIcon = appInfoR.get_icon();
+        const browserId = obj.desktopId || composite.browser;
+        icon = this._findAppInfo(browserId, browserId)?.get_icon() ?? null;
+      } else if (appInfo) {
+        appName = appInfo.get_display_name() || appInfo.get_name() || appName;
+        icon = appInfo.get_icon();
       }
 
-      const resolvedName = appName;
-      const displayName = obj.customName?.trim() || resolvedName;
-
-      const isEnabled = [...allIds].some((aid) =>
-        this._isAppEnabled(aid, enabledIds),
-      );
-
-      const rawSubtitle =
-        isBrowserInstance && parsedComposite
-          ? _("%s via %s").format(
-              parsedComposite.source.replace(/-/g, " "),
-              parsedComposite.browser,
-            )
-          : id;
+      const customName = obj.customName?.trim();
+      const displayName = customName || appName;
+      const baseSubtitle = composite
+        ? _("%s via %s").format(
+            composite.source.replace(/-/g, " "),
+            composite.browser,
+          )
+        : id;
 
       const row = new Adw.ActionRow({
         title: displayName,
-        subtitle: obj.customName?.trim()
-          ? `${rawSubtitle}  \u00b7  ${_("renamed from")} "${resolvedName}"`
-          : rawSubtitle,
+        subtitle: customName
+          ? `${baseSubtitle}  \u00b7  ${_("renamed from")} "${appName}"`
+          : baseSubtitle,
         activatable: false,
+        use_markup: false,
       });
-
-      row.add_prefix(
-        appIcon
-          ? new Gtk.Image({
-              gicon: appIcon,
-              pixel_size: 28,
-              valign: Gtk.Align.CENTER,
-            })
-          : new Gtk.Image({
-              icon_name: "media-optical-cd-audio-symbolic",
-              pixel_size: 28,
-              valign: Gtk.Align.CENTER,
-            }),
-      );
+      row.add_prefix(appImage(icon, 28));
 
       const renameBtn = new Gtk.Button({
         icon_name: "document-edit-symbolic",
@@ -238,23 +280,23 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
         css_classes: ["flat"],
         tooltip_text: _("Rename \u201c%s\u201d").format(displayName),
       });
-      renameBtn.connect("clicked", () => {
-        this._showRenameDialog(settings, id, normId, displayName, resolvedName);
-      });
+      renameBtn.connect("clicked", () =>
+        this._showRenameDialog(settings, id, normId, displayName, appName),
+      );
       row.add_suffix(renameBtn);
 
-      const sw = new Gtk.Switch({
-        active: isEnabled,
+      const toggle = new Gtk.Switch({
+        active: [...allIds].some((aid) => this._isAppEnabled(aid, enabledIds)),
         valign: Gtk.Align.CENTER,
       });
-      sw.connect("state-set", (_widget, state) => {
+      toggle.connect("state-set", (_widget, state) => {
         for (const aid of allIds) {
           this._setAppVinylState(settings, aid, aid, state);
           this._updateInstanceEnabledField(settings, aid, state);
         }
         return false;
       });
-      row.add_suffix(sw);
+      row.add_suffix(toggle);
 
       const removeBtn = new Gtk.Button({
         icon_name: "list-remove-symbolic",
@@ -273,64 +315,51 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
   }
 
   _showRenameDialog(settings, id, normId, currentDisplay, resolvedName) {
-    const isComposite = normId.includes("--");
-    const displayedSource = isComposite ? labelForId(normId) : resolvedName;
+    const source = normId.includes("--") ? labelForId(normId) : resolvedName;
 
-    const dialog = new Adw.AlertDialog({
-      heading: _("Rename Instance"),
-      body: _(
-        'Enter a custom display name for "%s".\nLeave blank to reset to the default.',
-      ).format(displayedSource),
-      default_response: "rename",
-      close_response: "cancel",
+    const entryRow = new Adw.EntryRow({
+      title: _("Display name"),
+      text:
+        currentDisplay !== resolvedName && currentDisplay !== source
+          ? currentDisplay
+          : "",
+      show_apply_button: true,
     });
 
-    dialog.add_response("cancel", _("Cancel"));
-    dialog.add_response("rename", _("Rename"));
-    dialog.set_response_appearance("rename", Adw.ResponseAppearance.SUGGESTED);
+    const list = new Gtk.ListBox({
+      selection_mode: Gtk.SelectionMode.NONE,
+      css_classes: ["boxed-list"],
+      margin_top: 12,
+      margin_bottom: 4,
+    });
+    list.append(entryRow);
 
     const clamp = new Adw.Clamp({
       maximum_size: 480,
       tightening_threshold: 320,
     });
+    clamp.set_child(list);
 
-    const listBox = new Gtk.ListBox({
-      selection_mode: Gtk.SelectionMode.NONE,
-      css_classes: ["boxed-list"],
-      margin_top: 12,
-      margin_bottom: 4,
-      margin_start: 0,
-      margin_end: 0,
+    const dialog = presentDialog(this._vinylHelpers.instancesGroup, {
+      heading: _("Rename Instance"),
+      body: _(
+        'Enter a custom display name for "%s".\nLeave blank to reset to the default.',
+      ).format(source),
+      extraChild: clamp,
+      responses: [
+        ["cancel", _("Cancel")],
+        ["rename", _("Rename"), Adw.ResponseAppearance.SUGGESTED],
+      ],
+      defaultResponse: "rename",
+      closeResponse: "cancel",
+      onResponse: (response) => {
+        if (response === "rename")
+          this._renameInstance(settings, normId, entryRow.text.trim());
+      },
     });
 
-    const entryRow = new Adw.EntryRow({
-      title: _("Display name"),
-      text:
-        currentDisplay !== resolvedName && currentDisplay !== displayedSource
-          ? currentDisplay
-          : "",
-      show_apply_button: true,
-    });
-    listBox.append(entryRow);
-    clamp.set_child(listBox);
-    dialog.set_extra_child(clamp);
-
-    entryRow.connect("entry-activated", () => {
-      dialog.response("rename");
-    });
-    entryRow.connect("apply", () => {
-      dialog.response("rename");
-    });
-
-    dialog.connect("response", (_dlg, responseId) => {
-      if (responseId !== "rename") return;
-      const newName = entryRow.text.trim();
-      this._renameInstance(settings, normId, newName, resolvedName);
-    });
-
-    let parent = this._vinylHelpers.instancesGroup.get_root();
-    if (!(parent instanceof Gtk.Window)) parent = null;
-    dialog.present(parent);
+    entryRow.connect("entry-activated", () => dialog.response("rename"));
+    entryRow.connect("apply", () => dialog.response("rename"));
 
     const mapId = entryRow.connect("map", () => {
       entryRow.grab_focus();
@@ -338,442 +367,268 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
     });
   }
 
-  _renameInstance(settings, normId, newName, resolvedName) {
-    const existing = settings.get_strv("vinyl-app-instances") ?? [];
-    const isComposite = normId.includes("--");
-    const updated = existing.map((raw) => {
-      try {
-        const obj = JSON.parse(raw);
-        const lower = (obj.id ?? "").toLowerCase();
-        const isMatch = isComposite
-          ? lower === normId
-          : lower === normId || lower.split(".").pop() === normId;
-        if (isMatch) {
-          if (!newName) {
-            const copy = Object.assign({}, obj);
-            delete copy.customName;
-            return JSON.stringify(copy);
-          }
-          return JSON.stringify({ ...obj, customName: newName });
-        }
-      } catch (_) {}
-      return raw;
+  // rewrites every stored instance matching normId, edit() returns the new object or null to drop it
+  _editInstances(settings, normId, edit) {
+    const composite = normId.includes("--");
+    const matches = (obj) => {
+      const id = (obj.id ?? "").toLowerCase();
+      return composite
+        ? id === normId
+        : id === normId || id.split(".").pop() === normId;
+    };
+
+    const updated = settings.get_strv("vinyl-app-instances").flatMap((raw) => {
+      const obj = parseInstance(raw);
+      if (!obj || !matches(obj)) return [raw];
+
+      const next = edit(obj);
+      return next ? [JSON.stringify(next)] : [];
     });
     settings.set_strv("vinyl-app-instances", updated);
   }
 
-  _updateInstanceEnabledField(settings, normId, enabledValue) {
-    const existing = settings.get_strv("vinyl-app-instances") ?? [];
-    const isComposite = normId.includes("--");
-    const updated = existing.map((raw) => {
-      try {
-        const obj = JSON.parse(raw);
-        const lower = (obj.id ?? "").toLowerCase();
-        const isMatch = isComposite
-          ? lower === normId
-          : lower === normId || lower.split(".").pop() === normId;
-        if (isMatch) return JSON.stringify({ ...obj, enabled: enabledValue });
-      } catch (_) {}
-      return raw;
-    });
-    settings.set_strv("vinyl-app-instances", updated);
+  _renameInstance(settings, normId, newName) {
+    this._editInstances(settings, normId, ({ customName, ...rest }) =>
+      newName ? { ...rest, customName: newName } : rest,
+    );
+  }
+
+  _updateInstanceEnabledField(settings, normId, enabled) {
+    this._editInstances(settings, normId, (obj) => ({ ...obj, enabled }));
   }
 
   _deleteInstance(settings, id, normId) {
-    const existing = settings.get_strv("vinyl-app-instances") ?? [];
-    const isComposite = normId.includes("--");
-    const filtered = existing.filter((raw) => {
-      try {
-        const obj = JSON.parse(raw);
-        const lower = (obj.id ?? "").toLowerCase();
-        if (isComposite) return lower !== normId;
-        return lower !== normId && lower.split(".").pop() !== normId;
-      } catch (_) {
-        return true;
-      }
-    });
-    settings.set_strv("vinyl-app-instances", filtered);
+    this._editInstances(settings, normId, () => null);
     this._setAppVinylState(settings, id, normId, false);
   }
 
-  /** @deprecated */
-  _removeInstance(settings, id, normId) {
-    this._deleteInstance(settings, id, normId);
-  }
-
   _loadMediaAndBrowserApps() {
-    const allApps = Gio.AppInfo.get_all();
-
-    const browserIds = new Set([
-      "google-chrome",
-      "google-chrome-stable",
-      "google-chrome-beta",
-      "chromium",
-      "chromium-browser",
-      "brave-browser",
-      "com.brave.Browser",
-      "brave-browser-stable",
-      "firefox",
-      "org.mozilla.firefox",
-      "firefox-esr",
-      "microsoft-edge",
-      "microsoft-edge-stable",
-      "microsoft-edge-beta",
-      "com.microsoft.Edge",
-      "vivaldi-stable",
-      "vivaldi",
-      "opera",
-      "opera-stable",
-      "com.opera.Opera",
-      "epiphany",
-      "org.gnome.Epiphany",
-      "midori",
-      "falkon",
-    ]);
-
-    const mediaCategories = [
-      "audio",
-      "music",
-      "video",
-      "player",
-      "multimedia",
-      "media",
-    ];
-
     const seen = new Set();
 
-    const apps = allApps.filter((app) => {
+    const apps = Gio.AppInfo.get_all().filter((app) => {
       if (!app.should_show()) return false;
 
       const rawId = app.get_id() || "";
       const normId = this._normalizeAppId(rawId).toLowerCase();
-
       if (seen.has(normId)) return false;
 
-      const cats = (app.get_categories() || "").toLowerCase();
-      const isMedia = mediaCategories.some((c) => cats.includes(c));
+      const categories = (app.get_categories() || "").toLowerCase();
+      const isMedia = MEDIA_CATEGORIES.some((c) => categories.includes(c));
       const isBrowser =
-        browserIds.has(normId) || browserIds.has(rawId.replace(".desktop", ""));
+        BROWSER_IDS.has(normId) || BROWSER_IDS.has(stripDesktop(rawId));
+      if (!isMedia && !isBrowser) return false;
 
-      if (isMedia || isBrowser) {
-        seen.add(normId);
-        return true;
-      }
-      return false;
+      seen.add(normId);
+      return true;
     });
 
     return apps.sort((a, b) => a.get_name().localeCompare(b.get_name()));
   }
 
   _buildMatchSet(appId) {
-    const ids = new Set();
     const lower = appId.toLowerCase();
-    ids.add(lower);
+    const ids = new Set([lower]);
 
     if (!lower.includes("--")) {
       const parts = lower.split(".");
       if (parts.length > 1) ids.add(parts[parts.length - 1]);
     }
-
     return ids;
   }
 
   _isAppEnabled(normId, vinylIds) {
-    const isComposite = normId.includes("--");
-    for (const stored of vinylIds) {
+    const composite = normId.includes("--");
+
+    return vinylIds.some((stored) => {
       const storedLower = stored.toLowerCase();
       const matchSet = this._buildMatchSet(stored);
-      if (matchSet.has(normId)) return true;
 
-      if (!isComposite) {
-        if (matchSet.has(normId.split(".").pop())) return true;
-      } else {
-        if (storedLower === normId) return true;
-        if (storedLower.includes("--")) {
-          const parsed1 = parseBrowserSourceId(normId);
-          const parsed2 = parseBrowserSourceId(storedLower);
-          if (
-            parsed1 &&
-            parsed2 &&
-            parsed1.source === parsed2.source &&
-            (parsed1.browser === parsed2.browser ||
-              parsed1.browser.includes(parsed2.browser) ||
-              parsed2.browser.includes(parsed1.browser))
-          )
-            return true;
-        }
-      }
-    }
-    return false;
+      if (matchSet.has(normId)) return true;
+      if (!composite) return matchSet.has(normId.split(".").pop());
+
+      return (
+        storedLower === normId ||
+        (storedLower.includes("--") && sameBrowserSource(normId, storedLower))
+      );
+    });
   }
 
   _setAppVinylState(settings, appId, normId, enable) {
     const enabledIds = settings.get_strv("vinyl-app-ids");
     const disabledIds = settings.get_strv("vinyl-app-disabled-ids");
-    const isComposite = normId.includes("--");
+    const composite = normId.includes("--");
 
     const sameApp = (id) => {
-      const idLower = id.toLowerCase();
-      if (idLower === normId) return true;
-      if (isComposite) {
-        if (!idLower.includes("--")) return false;
-        const p1 = parseBrowserSourceId(normId);
-        const p2 = parseBrowserSourceId(idLower);
-        return (
-          p1 &&
-          p2 &&
-          p1.source === p2.source &&
-          (p1.browser === p2.browser ||
-            p1.browser.includes(p2.browser) ||
-            p2.browser.includes(p1.browser))
-        );
-      }
+      const lower = id.toLowerCase();
+      if (lower === normId) return true;
+      if (composite)
+        return lower.includes("--") && sameBrowserSource(normId, lower);
 
-      const ms = this._buildMatchSet(id);
-      return ms.has(normId) || ms.has(normId.split(".").pop());
+      const matchSet = this._buildMatchSet(id);
+      return matchSet.has(normId) || matchSet.has(normId.split(".").pop());
     };
 
-    if (enable) {
-      if (!this._isAppEnabled(normId, enabledIds)) enabledIds.push(appId);
-      const newDisabled = disabledIds.filter((id) => !sameApp(id));
-      settings.set_strv("vinyl-app-ids", enabledIds);
-      settings.set_strv("vinyl-app-disabled-ids", newDisabled);
-    } else {
-      const newEnabled = enabledIds.filter((id) => !sameApp(id));
-      if (!this._isAppEnabled(normId, disabledIds)) disabledIds.push(appId);
-      settings.set_strv("vinyl-app-ids", newEnabled);
-      settings.set_strv("vinyl-app-disabled-ids", disabledIds);
-    }
+    const [add, remove, addKey, removeKey] = enable
+      ? [enabledIds, disabledIds, "vinyl-app-ids", "vinyl-app-disabled-ids"]
+      : [disabledIds, enabledIds, "vinyl-app-disabled-ids", "vinyl-app-ids"];
+
+    if (!this._isAppEnabled(normId, add)) add.push(appId);
+
+    settings.set_strv(addKey, add);
+    settings.set_strv(
+      removeKey,
+      remove.filter((id) => !sameApp(id)),
+    );
   }
 
-  //  Render search results
-
-  _renderAppList(filteredSystemApps, settings) {
+  _renderAppList(systemApps, settings) {
     const { appListBox, currentSearchQuery } = this._vinylHelpers;
     const query = currentSearchQuery ?? "";
 
-    let child = appListBox.get_first_child();
-    while (child) {
+    for (let child = appListBox.get_first_child(); child;) {
       const next = child.get_next_sibling();
       appListBox.remove(child);
       child = next;
     }
 
     const enabledIds = settings.get_strv("vinyl-app-ids");
+    const shown = new Set();
+    const instances = [];
 
-    const rawInstances = settings.get_strv("vinyl-app-instances") ?? [];
+    for (const raw of settings.get_strv("vinyl-app-instances")) {
+      const obj = parseInstance(raw);
+      if (!obj?.id) continue;
 
-    const shownInstanceIds = new Set();
-    const instanceRows = [];
-
-    for (const raw of rawInstances) {
-      let obj;
-      try {
-        obj = JSON.parse(raw);
-      } catch (_) {
-        continue;
-      }
-
-      const id = obj.id ?? "";
-      if (!id) continue;
+      const id = obj.id;
       const normId = id.toLowerCase();
-      if (shownInstanceIds.has(normId)) continue;
+      if (shown.has(normId)) continue;
 
       const desktopId = obj.desktopId || id;
+      const composite = parseBrowserSourceId(normId);
 
-      const parsedComp = parseBrowserSourceId(normId);
-      const isCompBrowser = parsedComp !== null;
+      let resolvedName = obj.name || desktopId;
+      let icon = null;
 
-      let resolvedName = obj.name || desktopId || id;
-      let appIcon = null;
-
-      if (isCompBrowser) {
+      if (composite) {
         resolvedName = labelForId(normId);
-        const browserDesktopId = obj.desktopId || parsedComp.browser;
-        const browserAppInfo = this._findAppInfo(
-          browserDesktopId,
-          browserDesktopId,
-        );
-        if (browserAppInfo) appIcon = browserAppInfo.get_icon();
+        const browserId = obj.desktopId || composite.browser;
+        icon = this._findAppInfo(browserId, browserId)?.get_icon() ?? null;
       } else {
-        const appInfoR = this._findAppInfo(desktopId, id);
-        if (appInfoR) {
+        const appInfo = this._findAppInfo(desktopId, id);
+        if (appInfo) {
           resolvedName =
-            appInfoR.get_display_name() || appInfoR.get_name() || resolvedName;
-          appIcon = appInfoR.get_icon();
+            appInfo.get_display_name() || appInfo.get_name() || resolvedName;
+          icon = appInfo.get_icon();
         }
       }
 
       const customName = obj.customName?.trim() || "";
       const displayName = customName || resolvedName;
-
-      const extraSearchText = isCompBrowser
-        ? `${parsedComp.source} ${parsedComp.browser} ${obj.mprisIdentity ?? ""}`
+      const extraText = composite
+        ? `${composite.source} ${composite.browser} ${obj.mprisIdentity ?? ""}`
         : "";
-      if (
-        query &&
-        !displayName.toLowerCase().includes(query) &&
-        !resolvedName.toLowerCase().includes(query) &&
-        !normId.includes(query) &&
-        !extraSearchText.toLowerCase().includes(query)
-      )
-        continue;
 
-      shownInstanceIds.add(normId);
-      instanceRows.push({
+      const matchesQuery =
+        !query ||
+        [displayName, resolvedName, normId, extraText].some((text) =>
+          text.toLowerCase().includes(query),
+        );
+      if (!matchesQuery) continue;
+
+      shown.add(normId);
+      instances.push({
         id,
         normId,
         displayName,
         resolvedName,
-        appIcon,
+        icon,
         customName,
+        composite,
       });
     }
 
-    if (instanceRows.length > 0) {
-      appListBox.append(
-        new Gtk.Label({
-          label: _("Saved Instances"),
-          xalign: 0,
-          css_classes: ["caption", "dim-label"],
-          margin_top: 8,
-          margin_bottom: 2,
-          margin_start: 8,
-        }),
-      );
+    for (const [index, item] of instances.entries()) {
+      if (index === 0) appListBox.append(sectionLabel(_("Saved Instances"), 8));
 
-      for (const {
+      const {
         id,
         normId,
         displayName,
         resolvedName,
-        appIcon,
+        icon,
         customName,
-      } of instanceRows) {
-        const isEnabled = this._isAppEnabled(normId, enabledIds);
+        composite,
+      } = item;
+      const baseSubtitle = composite
+        ? _("Browser: %s \u00b7 Source: %s").format(
+            composite.browser,
+            composite.source.replace(/-/g, " "),
+          )
+        : id;
 
-        const pbc = parseBrowserSourceId(normId);
-        const subtitleBase = pbc
-          ? _("Browser: %s · Source: %s").format(
-              pbc.browser,
-              pbc.source.replace(/-/g, " "),
-            )
-          : id;
-        const row = new Adw.ActionRow({
-          title: displayName,
-          subtitle: customName
-            ? `${subtitleBase}  ·  ${_("renamed from")} "${resolvedName}"`
-            : subtitleBase,
-          activatable: false,
-        });
+      const row = new Adw.ActionRow({
+        title: displayName,
+        subtitle: customName
+          ? `${baseSubtitle}  \u00b7  ${_("renamed from")} "${resolvedName}"`
+          : baseSubtitle,
+        activatable: false,
+        use_markup: false,
+      });
+      row.add_prefix(appImage(icon, 24));
 
-        row.add_prefix(
-          appIcon
-            ? new Gtk.Image({
-                gicon: appIcon,
-                pixel_size: 24,
-                valign: Gtk.Align.CENTER,
-              })
-            : new Gtk.Image({
-                icon_name: "media-optical-cd-audio-symbolic",
-                pixel_size: 24,
-                valign: Gtk.Align.CENTER,
-              }),
-        );
-
-        const sw = new Gtk.Switch({
-          active: isEnabled,
-          valign: Gtk.Align.CENTER,
-        });
-        sw.connect("state-set", (_w, state) => {
-          this._setAppVinylState(settings, id, normId, state);
-          this._updateInstanceEnabledField(settings, normId, state);
-          return false;
-        });
-        row.add_suffix(sw);
-        appListBox.append(row);
-      }
+      const toggle = new Gtk.Switch({
+        active: this._isAppEnabled(normId, enabledIds),
+        valign: Gtk.Align.CENTER,
+      });
+      toggle.connect("state-set", (_widget, state) => {
+        this._setAppVinylState(settings, id, normId, state);
+        this._updateInstanceEnabledField(settings, normId, state);
+        return false;
+      });
+      row.add_suffix(toggle);
+      appListBox.append(row);
     }
 
-    const sysApps = filteredSystemApps.filter((app) => {
-      const rawId = app.get_id() || "";
-      const normId = this._normalizeAppId(rawId)?.toLowerCase() ?? "";
-      return !shownInstanceIds.has(normId);
+    const others = systemApps.filter((app) => {
+      const normId =
+        this._normalizeAppId(app.get_id() || "")?.toLowerCase() ?? "";
+      return !shown.has(normId);
     });
 
-    if (sysApps.length > 0) {
-      if (instanceRows.length > 0) {
-        appListBox.append(
-          new Gtk.Label({
-            label: _("Other Apps"),
-            xalign: 0,
-            css_classes: ["caption", "dim-label"],
-            margin_top: 10,
-            margin_bottom: 2,
-            margin_start: 8,
-          }),
-        );
-      }
+    if (others.length > 0 && instances.length > 0)
+      appListBox.append(sectionLabel(_("Other Apps"), 10));
 
-      sysApps.forEach((app) => {
-        const rawId = app.get_id();
-        const appId = this._normalizeAppId(rawId);
-        if (!appId) return;
+    for (const app of others) {
+      const appId = this._normalizeAppId(app.get_id());
+      if (!appId) continue;
 
-        const normId = appId.toLowerCase();
-        const isEnabled = this._isAppEnabled(normId, enabledIds);
-
-        const row = new Adw.ActionRow({
-          title: app.get_name(),
-          subtitle: appId,
-          activatable: false,
-        });
-
-        const icon = app.get_icon();
-        if (icon)
-          row.add_prefix(
-            new Gtk.Image({
-              gicon: icon,
-              pixel_size: 24,
-              valign: Gtk.Align.CENTER,
-            }),
-          );
-
-        const sw = new Gtk.Switch({
-          active: isEnabled,
-          valign: Gtk.Align.CENTER,
-        });
-        sw.connect("state-set", (_w, state) => {
-          if (state) {
-            const record = JSON.stringify({
-              id: appId,
-              name: app.get_name(),
-              desktopId: appId,
-              busName: "",
-              enabled: true,
-            });
-            const existing = settings.get_strv("vinyl-app-instances") ?? [];
-            const deduped = existing.filter((raw) => {
-              try {
-                return JSON.parse(raw).id?.toLowerCase() !== normId;
-              } catch (_) {
-                return true;
-              }
-            });
-            deduped.push(record);
-            settings.set_strv("vinyl-app-instances", deduped);
-          } else {
-            this._updateInstanceEnabledField(settings, normId, false);
-          }
-          this._setAppVinylState(settings, appId, normId, state);
-          return false;
-        });
-        row.add_suffix(sw);
-        appListBox.append(row);
+      const normId = appId.toLowerCase();
+      const row = new Adw.ActionRow({
+        title: app.get_name(),
+        subtitle: appId,
+        activatable: false,
+        use_markup: false,
       });
+
+      const icon = app.get_icon();
+      if (icon) row.add_prefix(appImage(icon, 24));
+
+      const toggle = new Gtk.Switch({
+        active: this._isAppEnabled(normId, enabledIds),
+        valign: Gtk.Align.CENTER,
+      });
+      toggle.connect("state-set", (_widget, state) => {
+        if (state) this._saveSystemAppInstance(settings, app, appId, normId);
+        else this._updateInstanceEnabledField(settings, normId, false);
+
+        this._setAppVinylState(settings, appId, normId, state);
+        return false;
+      });
+      row.add_suffix(toggle);
+      appListBox.append(row);
     }
 
-    if (instanceRows.length === 0 && sysApps.length === 0) {
+    if (instances.length === 0 && others.length === 0) {
       appListBox.append(
         new Gtk.Label({
           label: _("No matching apps found"),
@@ -785,15 +640,29 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
     }
   }
 
-  /**
-   * @param {string} desktopId   stored desktopId field
-   * @param {string} fallbackId  stored id field
-   * @returns {Gio.AppInfo|null}
-   */
+  _saveSystemAppInstance(settings, app, appId, normId) {
+    const others = settings
+      .get_strv("vinyl-app-instances")
+      .filter((raw) => parseInstance(raw)?.id?.toLowerCase() !== normId);
+
+    others.push(
+      JSON.stringify({
+        id: appId,
+        name: app.get_name(),
+        desktopId: appId,
+        busName: "",
+        enabled: true,
+      }),
+    );
+    settings.set_strv("vinyl-app-instances", others);
+  }
+
+  // desktopId is the stored desktopId, fallbackId the stored id
   _findAppInfo(desktopId, fallbackId) {
     const tokens = new Set();
     for (const base of [desktopId, fallbackId]) {
       if (!base) continue;
+
       const stripped = base
         .replace(/\.instance[_\d]+$/i, "")
         .replace(/\.\d+$/, "");
@@ -801,69 +670,40 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
         const lower = variant.toLowerCase();
         tokens.add(lower);
         tokens.add(`${lower}.desktop`);
-
-        for (const seg of lower.split(".")) {
-          if (seg.length > 2) tokens.add(seg);
-        }
+        lower
+          .split(".")
+          .filter((seg) => seg.length > 2)
+          .forEach((seg) => tokens.add(seg));
       }
     }
+    GENERIC_TOKENS.forEach((token) => tokens.delete(token));
 
-    for (const generic of [
-      "org",
-      "com",
-      "net",
-      "io",
-      "app",
-      "application",
-      "browser",
-      "client",
-      "player",
-      "media",
-      "desktop",
-      "instance",
-      "snap",
-      "flatpak",
-    ]) {
-      tokens.delete(generic);
-    }
+    const apps = Gio.AppInfo.get_all();
+    const cleanId = (app) => stripDesktop((app.get_id() ?? "").toLowerCase());
 
-    const allApps = Gio.AppInfo.get_all();
+    const byId = apps.find((app) => tokens.has(cleanId(app)));
+    if (byId) return byId;
 
-    for (const app of allApps) {
-      const appId = (app.get_id() ?? "").toLowerCase();
-      if (tokens.has(appId)) return app;
-      const appIdClean = appId.endsWith(".desktop")
-        ? appId.slice(0, -8)
-        : appId;
-      if (tokens.has(appIdClean)) return app;
-    }
+    const bySegment = apps.find((app) =>
+      cleanId(app)
+        .split(".")
+        .some((seg) => seg.length > 2 && tokens.has(seg)),
+    );
+    if (bySegment) return bySegment;
 
-    for (const app of allApps) {
-      const appId = (app.get_id() ?? "").toLowerCase();
-      const appIdClean = appId.endsWith(".desktop")
-        ? appId.slice(0, -8)
-        : appId;
-      for (const seg of appIdClean.split(".")) {
-        if (seg.length > 2 && tokens.has(seg)) return app;
-      }
-    }
-
-    for (const app of allApps) {
-      const name = (app.get_display_name() ?? "")
-        .toLowerCase()
-        .replace(/\s+/g, "");
-      if (tokens.has(name)) return app;
-      const firstWord = (app.get_display_name() ?? "")
-        .toLowerCase()
-        .split(/\s+/)[0];
-      if (firstWord.length > 2 && tokens.has(firstWord)) return app;
-    }
-
-    return null;
+    return (
+      apps.find((app) => {
+        const name = (app.get_display_name() ?? "").toLowerCase();
+        const firstWord = name.split(/\s+/)[0];
+        return (
+          tokens.has(name.replace(/\s+/g, "")) ||
+          (firstWord.length > 2 && tokens.has(firstWord))
+        );
+      }) ?? null
+    );
   }
 
   _normalizeAppId(id) {
-    if (!id) return null;
-    return id.endsWith(".desktop") ? id.slice(0, -8) : id;
+    return id ? stripDesktop(id) : null;
   }
 }

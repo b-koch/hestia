@@ -36,15 +36,10 @@ function _isBrowserPlayer(name) {
 
 function _browserPlayerHasMedia(playerName, manager) {
   if (!manager || !playerName) return false;
-  try {
-    const info = manager.getPlayerInfo(playerName);
-    if (!info) return false;
-    if (info.status === "Playing" || info.status === "Paused") return true;
-    if (info.status === "Stopped" && info.title) return true;
-    return false;
-  } catch (_) {
-    return false;
-  }
+  const info = manager.getPlayerInfo(playerName);
+  if (!info) return false;
+  if (info.status === "Playing" || info.status === "Paused") return true;
+  return info.status === "Stopped" && !!info.title;
 }
 
 const _DEFAULT_TAB_ICON_SIZE    = 18;
@@ -52,32 +47,26 @@ const _DEFAULT_SINGLE_ICON_SIZE = 28;
 
 /** Read tab-icon-size from settings; returns the effective px value. */
 function _tabIconSize(settings) {
-  try {
-    const v = settings && settings.get_int("tab-icon-size");
-    return v && v >= 12 ? v : _DEFAULT_TAB_ICON_SIZE;
-  } catch (_) { return _DEFAULT_TAB_ICON_SIZE; }
+  const v = settings && settings.get_int("tab-icon-size");
+  return v && v >= 12 ? v : _DEFAULT_TAB_ICON_SIZE;
 }
 
 /** Read single-icon-size from settings; returns the effective px value. */
 function _singleIconSize(settings) {
-  try {
-    const v = settings && settings.get_int("single-icon-size");
-    return v && v >= 16 ? v : _DEFAULT_SINGLE_ICON_SIZE;
-  } catch (_) { return _DEFAULT_SINGLE_ICON_SIZE; }
+  const v = settings && settings.get_int("single-icon-size");
+  return v && v >= 16 ? v : _DEFAULT_SINGLE_ICON_SIZE;
 }
 
 function _isDarkTheme() {
-  try {
-    const s = new Gio.Settings({ schema_id: playerConstant.INTERFACE_SCHEMA });
-    const keys = s.list_keys();
-    if (keys.indexOf(playerConstant.INTERFACE_KEY) !== -1)
-      return s.get_string(playerConstant.INTERFACE_KEY) === "prefer-dark";
-    if (keys.indexOf(playerConstant.GTK_THEME_KEY) !== -1)
-      return s
-        .get_string(playerConstant.GTK_THEME_KEY)
-        .toLowerCase()
-        .includes("dark");
-  } catch (_) {}
+  const s = new Gio.Settings({ schema_id: playerConstant.INTERFACE_SCHEMA });
+  const keys = s.list_keys();
+  if (keys.indexOf(playerConstant.INTERFACE_KEY) !== -1)
+    return s.get_string(playerConstant.INTERFACE_KEY) === "prefer-dark";
+  if (keys.indexOf(playerConstant.GTK_THEME_KEY) !== -1)
+    return s
+      .get_string(playerConstant.GTK_THEME_KEY)
+      .toLowerCase()
+      .includes("dark");
   return true;
 }
 
@@ -93,7 +82,7 @@ export const PlayerTabs = GObject.registerClass(
   class PlayerTabs extends St.BoxLayout {
     _init() {
       super._init({
-        vertical: true,
+        orientation: Clutter.Orientation.VERTICAL,
         style: "spacing: 0px;",
         reactive: true,
         x_expand: true,
@@ -136,26 +125,21 @@ export const PlayerTabs = GObject.registerClass(
     }
 
     _watchTheme() {
-      try {
-        this._themeSettings = new Gio.Settings({
-          schema_id: playerConstant.INTERFACE_SCHEMA,
-        });
-        const keys = this._themeSettings.list_keys();
-        const key =
-          keys.indexOf(playerConstant.INTERFACE_KEY) !== -1
-            ? playerConstant.INTERFACE_KEY
-            : playerConstant.GTK_THEME_KEY;
-        this._themeSettingsId = this._themeSettings.connect(
-          `changed::${key}`,
-          () => {
-            this._dark = _isDarkTheme();
-            this._refreshStyles();
-          },
-        );
-      } catch (_) {
-        this._themeSettings = null;
-        this._themeSettingsId = 0;
-      }
+      this._themeSettings = new Gio.Settings({
+        schema_id: playerConstant.INTERFACE_SCHEMA,
+      });
+      const keys = this._themeSettings.list_keys();
+      const key =
+        keys.indexOf(playerConstant.INTERFACE_KEY) !== -1
+          ? playerConstant.INTERFACE_KEY
+          : playerConstant.GTK_THEME_KEY;
+      this._themeSettingsId = this._themeSettings.connect(
+        `changed::${key}`,
+        () => {
+          this._dark = _isDarkTheme();
+          this._refreshStyles();
+        },
+      );
     }
 
     _refreshStyles() {
@@ -649,30 +633,18 @@ export const PlayerTabs = GObject.registerClass(
     }
 
     _cancelAllClickTimers() {
-      for (const [, id] of this._clickTimers) {
-        try {
-          GLib.source_remove(id);
-        } catch (_) {}
-      }
+      for (const [, id] of this._clickTimers) GLib.source_remove(id);
       this._clickTimers.clear();
     }
 
     _cancelAllPulseTimers() {
-      for (const id of this._pulseTimers) {
-        try {
-          GLib.source_remove(id);
-        } catch (_) {}
-      }
+      for (const id of this._pulseTimers) GLib.source_remove(id);
       this._pulseTimers.clear();
     }
 
     _destroyTabButtons() {
       for (const { button, handlers } of this._buttonEntries) {
-        for (const id of handlers) {
-          try {
-            button.disconnect(id);
-          } catch (_) {}
-        }
+        for (const id of handlers) button.disconnect(id);
       }
       this._buttonEntries = [];
     }
@@ -687,7 +659,7 @@ export const PlayerTabs = GObject.registerClass(
     setSettings(settings) {
       // Disconnect old listeners
       for (const id of this._settingsSignalIds) {
-        try { this._settings.disconnect(id); } catch (_) {}
+        this._settings.disconnect(id);
       }
       this._settingsSignalIds = [];
 
@@ -715,13 +687,9 @@ export const PlayerTabs = GObject.registerClass(
     }
 
     _isMonochrome() {
-      try {
-        return this._settings
-          ? this._settings.get_boolean("monochrome-icons")
-          : false;
-      } catch (_) {
-        return false;
-      }
+      return this._settings
+        ? this._settings.get_boolean("monochrome-icons")
+        : false;
     }
 
     _applyMonochrome() {
@@ -751,16 +719,14 @@ export const PlayerTabs = GObject.registerClass(
     destroy() {
       if (this._settingsSignalIds && this._settings) {
         for (const id of this._settingsSignalIds) {
-          try { this._settings.disconnect(id); } catch (_) {}
+          this._settings.disconnect(id);
         }
         this._settingsSignalIds = [];
       }
       this._settings = null;
 
       if (this._themeSettings && this._themeSettingsId) {
-        try {
-          this._themeSettings.disconnect(this._themeSettingsId);
-        } catch (_) {}
+        this._themeSettings.disconnect(this._themeSettingsId);
         this._themeSettingsId = 0;
         this._themeSettings = null;
       }

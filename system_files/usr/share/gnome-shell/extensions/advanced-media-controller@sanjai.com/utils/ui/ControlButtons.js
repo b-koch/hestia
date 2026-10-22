@@ -7,11 +7,7 @@ import Clutter from "gi://Clutter";
 /** @param {Gio.Settings|null} s  @returns {number} popup width in px */
 function _pw(s) {
   if (!s) return 340;
-  try {
-    return Math.max(280, s.get_int("popup-width"));
-  } catch (_e) {
-    return 340;
-  }
+  return Math.max(280, s.get_int("popup-width"));
 }
 
 function _metrics(s) {
@@ -53,20 +49,24 @@ function _metrics(s) {
 function _btnOrder(s) {
   const DEFAULT = ["shuffle", "previous", "play", "next", "repeat"];
   if (!s) return DEFAULT;
-  try {
-    const raw = s.get_string("popup-button-order");
-    if (!raw) return DEFAULT;
-    const VALID = new Set(DEFAULT);
-    const seen = new Set();
-    const out = [];
-    for (const id of raw.split(",").map(t => t.trim()).filter(Boolean)) {
-      if (VALID.has(id) && !seen.has(id)) { out.push(id); seen.add(id); }
+  const raw = s.get_string("popup-button-order");
+  if (!raw) return DEFAULT;
+  const VALID = new Set(DEFAULT);
+  const seen = new Set();
+  const out = [];
+  for (const id of raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)) {
+    if (VALID.has(id) && !seen.has(id)) {
+      out.push(id);
+      seen.add(id);
     }
-    for (const id of DEFAULT) { if (!seen.has(id)) out.push(id); }
-    return out;
-  } catch (_e) {
-    return DEFAULT;
   }
+  for (const id of DEFAULT) {
+    if (!seen.has(id)) out.push(id);
+  }
+  return out;
 }
 
 export const ControlButtons = GObject.registerClass(
@@ -156,12 +156,18 @@ export const ControlButtons = GObject.registerClass(
     /** Map a button id string to the corresponding St.Button widget. */
     _btnForId(id) {
       switch (id) {
-        case "shuffle":  return this._shuffleBtn;
-        case "previous": return this._prevBtn;
-        case "play":     return this._playBtn;
-        case "next":     return this._nextBtn;
-        case "repeat":   return this._repeatBtn;
-        default:         return null;
+        case "shuffle":
+          return this._shuffleBtn;
+        case "previous":
+          return this._prevBtn;
+        case "play":
+          return this._playBtn;
+        case "next":
+          return this._nextBtn;
+        case "repeat":
+          return this._repeatBtn;
+        default:
+          return null;
       }
     }
 
