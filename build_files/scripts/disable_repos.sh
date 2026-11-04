@@ -10,4 +10,10 @@ for repo in /etc/yum.repos.d/*.repo; do
     fi
 done
 
+dnf5 config-manager enable \
+    terra \
+    terra-extras \
+    terra-mesa \
+    terra-source
+
 disable_coprs
