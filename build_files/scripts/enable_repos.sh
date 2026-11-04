@@ -2,13 +2,10 @@
 set -euo pipefail
 source /ctx/lib/manage_coprs.sh
 
-for repo in /ctx/repos/*.repo; do
+for repo in /etc/yum.repos.d/*.repo; do
     [ -e "$repo" ] || continue
 
-    repo_name="$(basename "$repo")"
-    target="/etc/yum.repos.d/${repo_name}"
-
-    if [ -f "$target" ]; then
+    if [ -f "$repo" ]; then
         echo "Enabling: $target"
         sed -i 's/^enabled=0/enabled=1/' "$target"
     fi
@@ -17,7 +14,7 @@ done
 # Debug
 shopt -s dotglob nullglob
 
-dir="${1:-/ctx/repos}"
+dir="${1:-/etc/yum.repos.d/}"
 
 for f in "$dir"/*; do
     echo "$f"
