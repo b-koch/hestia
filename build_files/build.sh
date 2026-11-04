@@ -7,6 +7,9 @@ cp -avf "/ctx/system_files"/. /
 echo "Ensuring hestia shell scripts are executable..."
 find /usr/lib/hestia -type f -name '*.sh' -exec chmod +x {} +
 
+echo "Enabling repositories..."
+/ctx/scripts/enable_repos.sh
+
 echo "Adding repositories..."
 /ctx/scripts/add_repos.sh
 
