@@ -13,7 +13,6 @@ done
 dnf5 config-manager enable \
     terra \
     terra-extras \
-    terra-mesa \
-    terra-source
+    terra-mesa
 
 disable_coprs
