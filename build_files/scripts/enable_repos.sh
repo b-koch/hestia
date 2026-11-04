@@ -9,7 +9,16 @@ for repo in /ctx/repos/*.repo; do
     target="/etc/yum.repos.d/${repo_name}"
 
     if [ -f "$target" ]; then
-        echo "$target"
+        echo "Enabling: $target"
         sed -i 's/^enabled=0/enabled=1/' "$target"
     fi
+done
+
+# Debug
+shopt -s dotglob nullglob
+
+dir="${1:-/ctx/repos}"
+
+for f in "$dir"/*; do
+    echo "$f"
 done
