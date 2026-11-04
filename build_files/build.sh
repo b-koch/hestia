@@ -10,6 +10,9 @@ find /usr/lib/hestia -type f -name '*.sh' -exec chmod +x {} +
 echo "Adding repositories..."
 /ctx/scripts/add_repos.sh
 
+echo "Enabling repositories..."
+/ctx/scripts/enable_repos.sh
+
 echo "Removing unwanted packages..."
 /ctx/scripts/remove_packages.sh
 

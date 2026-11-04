@@ -9,6 +9,7 @@ for repo in /ctx/repos/*.repo; do
     target="/etc/yum.repos.d/${repo_name}"
 
     if [ -f "$target" ]; then
+        echo "$target"
         sed -i 's/^enabled=0/enabled=1/' "$target"
     fi
 done

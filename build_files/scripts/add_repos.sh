@@ -26,6 +26,4 @@ for repo in /ctx/repos/*.repo; do
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
 
-dnf5 install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra{$RELEASEVER}' terra-release terra-gpg-keys
-
 enable_coprs
