@@ -6,8 +6,8 @@ for repo in /etc/yum.repos.d/*.repo; do
     [ -e "$repo" ] || continue
 
     if [ -f "$repo" ]; then
-        echo "Enabling: $target"
-        sed -i 's/^enabled=0/enabled=1/' "$target"
+        echo "Enabling: $repo"
+        sed -i 's/^enabled=0/enabled=1/' "$repo"
     fi
 done
 
