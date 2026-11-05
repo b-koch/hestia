@@ -1,8 +1,0 @@
-[Unit]
-Description=Limit app.slice GPU VRAM usage for UID %i
-After=user@%i.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/lib/hestia/vram-fix/set-dmem-appslice-limit.sh %i
-RemainAfterExit=yes
