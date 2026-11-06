@@ -16,6 +16,7 @@ ENABLE_EXTENSIONS=(
     "weatheroclock@CleaMenezesJr.github.io"
     "bluetooth-battery-monitor@v8v88v8v88.com"
     "deja-window@mcast.gnomext.com"
+    "rounded-window-corners@ztrahmet.github.io"
 )
 
 DISABLE_EXTENSIONS=(
@@ -27,6 +28,7 @@ DISABLE_EXTENSIONS=(
     "desktop-cube@schneegans.github.com"
     "gsconnect@andyholmes.github.io"
     "user-theme@gnome-shell-extensions.gcampax.github.com"
+    "touchup@mityax"
 )
 
 OUTPUT="/usr/share/glib-2.0/schemas/zz1-01-hestia-extensions.gschema.override"

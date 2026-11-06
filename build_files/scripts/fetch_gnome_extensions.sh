@@ -18,6 +18,7 @@ EXTENSIONS=(
     "355:status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "5470:weatheroclock@CleoMenezesJr.github.io"
     "9024:deja-window@mcast.gnomext.com"
+    "10809:rounded-window-corners@ztrahmet.github.io"
     #"3843:just-perfection-desktop@just-perfection"
 )
 
