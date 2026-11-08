@@ -11,7 +11,7 @@ ENABLE_EXTENSIONS=(
     "grand-theft-focus@zalckos.github.com"
     "no-overwiew@fthx"
     "pip-on-top@rafostar.github.com"
-    "rounded-window-corners@fxgn"
+    # "rounded-window-corners@fxgn"
     "status-area-horizontal-spacing@mathematical.coffee.gmail.com"
     "weatheroclock@CleaMenezesJr.github.io"
     "bluetooth-battery-monitor@v8v88v8v88.com"
