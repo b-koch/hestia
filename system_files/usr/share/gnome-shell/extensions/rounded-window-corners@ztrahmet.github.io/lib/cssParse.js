@@ -6,11 +6,11 @@
  * @license    GPL-3.0-or-later
  */
 
-import {closingParen, parseColor, parseLength, skipString, splitOn, tokenize} from './cssValues.js';
+import {closingParen, drawnColor, parseColor, parseLength, skipString, splitOn, tokenize} from './cssValues.js';
 
 // libadwaita's window style (LGPL-2.1-or-later), for when its stylesheet cannot be read.
 export const FALLBACK_CSS = `
-:root { --window-radius: 15px; }
+:root { --window-radius: 15px; --border-opacity: 15%; }
 .background { color: RGB(0 0 6 / 80%); }
 window.csd {
     border-radius: var(--window-radius);
@@ -25,6 +25,7 @@ window.csd:backdrop {
     .background { color: white; }
 }
 @media (prefers-contrast: more) {
+    :root { --border-opacity: 50%; }
     window.csd {
         outline-color: rgb(255 255 255 / 30%);
         box-shadow: 0 0 14px 5px rgb(0 0 0 / 15%), 0 0 5px 2px rgb(0 0 0 / 10%), 0 0 0 1px rgb(0 0 0 / 80%);
@@ -32,7 +33,17 @@ window.csd:backdrop {
     window.csd:backdrop {
         box-shadow: 0 0 14px 5px transparent, 0 0 10px 5px rgb(0 0 0 / 8%), 0 0 0 1px rgb(0 0 0 / 80%);
     }
-}`;
+}
+window.csd.tiled, window.csd.tiled-top, window.csd.tiled-left, window.csd.tiled-right, window.csd.tiled-bottom {
+    --window-radius: 0px;
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, currentColor var(--border-opacity), transparent), 0 0 0 20px transparent;
+}
+window.csd.tiled:backdrop, window.csd.tiled-top:backdrop, window.csd.tiled-left:backdrop,
+window.csd.tiled-right:backdrop, window.csd.tiled-bottom:backdrop {
+    box-shadow: 0 0 0 1px color-mix(in srgb, currentColor var(--border-opacity), transparent), 0 0 0 20px transparent;
+}
+window.csd.maximized, window.csd.fullscreen { --window-radius: 0px; outline: none; box-shadow: none; }`;
 
 const COMMENT = /\/\*[\s\S]*?\*\//g;
 
@@ -60,8 +71,14 @@ const INITIAL_COLOR = [1, 1, 1, 1];
 
 const CSS_WIDE_KEYWORDS = /^(?:initial|inherit|unset)$/i;
 
-// A libadwaita window is the root node, with these classes.
-const WINDOW_CLASSES = new Set(['background', 'csd']);
+// The window's classes, as GTK sets them. Mutter doesn't tell the Shell which edges are tiled, so all are.
+const NORMAL = ['background', 'csd'];
+const TILED = [...NORMAL, 'tiled-top', 'tiled-right', 'tiled-bottom', 'tiled-left'];
+const MAXIMIZED = [...TILED, 'maximized'];
+
+// Normal, tiled and maximized, each focused and in backdrop.
+const LOOKS = [NORMAL, TILED, MAXIMIZED].flatMap(classes =>
+    [false, true].map(backdrop => ({classes: new Set(classes), backdrop})));
 
 /**
  * Removes comments, which GTK ignores everywhere.
@@ -239,8 +256,8 @@ function matchBrace(css, open) {
     return -1;
 }
 
-// Rules and @define-color statements, inside the media queries that match.
-function* eachRule(css, env) {
+// Rules and @define-color statements, each with the media queries it is inside.
+function* eachRule(css, media = []) {
     let i = 0;
     while (i < css.length) {
         let brace = i;
@@ -253,7 +270,7 @@ function* eachRule(css, env) {
         if (css[brace] !== '{') {
             const define = /^@define-color\s+([\w-]+)\s+(.+)$/is.exec(prelude);
             if (define)
-                yield {define: [define[1], define[2]]};
+                yield {media, define: [define[1], define[2]]};
             i = brace + 1;
             continue;
         }
@@ -264,11 +281,11 @@ function* eachRule(css, env) {
         const body = css.slice(brace + 1, end);
         i = end + 1;
 
-        const media = /^@media\b/i.exec(prelude);
-        if (media && mediaMatches(prelude.slice(media[0].length), env))
-            yield* eachRule(body, env);
+        const at = /^@media\b/i.exec(prelude);
+        if (at)
+            yield* eachRule(body, [...media, prelude.slice(at[0].length)]);
         else if (!prelude.startsWith('@'))
-            yield {prelude, body};
+            yield {media, prelude, body};
     }
 }
 
@@ -290,13 +307,13 @@ const PSEUDO = String.raw`:[\w-]+(?:\((?:[^()]|\([^()]*\))*\))?`;
 const COMPOUND = new RegExp(String.raw`^(\*|[a-z][\w-]*)?((?:\.[\w-]+|${PSEUDO})*)$`, 'i');
 const PARTS = new RegExp(String.raw`\.[\w-]+|${PSEUDO}`, 'g');
 
-// state holds whether the window is in backdrop and the text runs right to left.
+// state holds the window's classes, whether it is in backdrop and whether text runs right to left.
 function matchSimple(simple, state) {
     const [, kind, name, argument] = /^([.:]?)([\w-]+|\*)(?:\((.*)\))?$/s.exec(simple);
     if (kind === '')
         return [name === '*' || name === 'window', name === '*' ? 0 : 1];
     if (kind === '.')
-        return [WINDOW_CLASSES.has(name), 100];
+        return [state.classes.has(name), 100];
     if (name === 'not' && argument !== undefined) {
         const inner = argument.trim();
         const [matches, weight] = SIMPLE.test(inner) && !/^:not\(/i.test(inner) ? matchSimple(inner, state) : [true, 0];
@@ -307,13 +324,16 @@ function matchSimple(simple, state) {
     return [argument === undefined && (name === 'root' || (name === 'backdrop' && state.backdrop)), 100];
 }
 
-// Specificity of a selector that matches the window, or -1.
-function specificity(selector, state) {
+// The simple selectors of a compound selector, or null for any other, which can't match the window.
+function compoundParts(selector) {
     const m = COMPOUND.exec(selector.trim());
-    if (!m || !m[0])
-        return -1;
+    return m && m[0] ? [m[1] ?? '*', ...m[2].match(PARTS) ?? []] : null;
+}
+
+// Specificity of compoundParts() that match the window, or -1.
+function specificity(parts, state) {
     let total = 0;
-    for (const simple of [m[1] ?? '*', ...m[2].match(PARTS) ?? []]) {
+    for (const simple of parts) {
         const [matches, weight] = matchSimple(simple, state);
         if (!matches)
             return -1;
@@ -372,11 +392,11 @@ function colorNames(defines, colorName, currentColor) {
     return names;
 }
 
-// The window's values when focused or in backdrop.
-function computeState(rules, state, defines, colorName) {
+// The window's values in LOOKS[look].
+function computeState(rules, look, defines, colorName) {
     const ordered = rules
-        .filter(rule => rule[state] >= 0)
-        .sort((a, b) => a.sheet - b.sheet || a[state] - b[state]);
+        .filter(rule => rule.specificities[look] >= 0)
+        .sort((a, b) => a.sheet - b.sheet || a.specificities[look] - b.specificities[look]);
 
     const vars = new Map();
     for (const rule of ordered) {
@@ -412,46 +432,79 @@ function computeState(rules, state, defines, colorName) {
 }
 
 /**
+ * Reads the rules of a stylesheet that can match the window, and its @define-color statements.
+ *
+ * @param {string} css
+ * @returns {Array<object>} In order, each with the media queries it is inside.
+ */
+export function parseStylesheet(css) {
+    const items = [];
+    for (const item of eachRule(stripComments(css))) {
+        if (item.define) {
+            items.push(item);
+            continue;
+        }
+        // Its specificity in each look, left to right and right to left; -1 where it doesn't match.
+        const compounds = splitOn(item.prelude, ',').map(compoundParts).filter(Boolean);
+        const specificities = [false, true].map(rtl => LOOKS.map(({classes, backdrop}) =>
+            Math.max(-1, ...compounds.map(parts => specificity(parts, {classes, backdrop, rtl})))));
+        if (specificities.flat().some(s => s >= 0))
+            items.push({media: item.media, specificities, declarations: parseDeclarations(item.body)});
+    }
+    return items;
+}
+
+/**
  * Computes the window's corner radii, outline and shadows the way GTK does.
  *
- * @param {string[]} sheets - Stylesheets, lowest priority first.
+ * @param {Array<Array<object>>} sheets - From parseStylesheet(), lowest priority first.
  * @param {object} env
  * @param {boolean} env.dark
  * @param {boolean} env.highContrast
  * @param {boolean} env.rtl - Whether text runs right to left.
- * @param {function(string): ?number[]} env.colorName - Looks up a color
- *   name, as Pango does for GTK.
- * @returns {object}
+ * @param {function(string): ?number[]} env.colorName - Looks up a color name, as Pango does for GTK.
+ * @returns {object} {normal, tiled, maximized}, each {radii, focused, backdrop}.
  */
 export function readWindowStyle(sheets, env) {
     const rules = [];
     const defines = new Map();
-    sheets.forEach((css, sheet) => {
-        for (const item of eachRule(stripComments(css), env)) {
-            if (item.define) {
-                defines.set(...item.define);
+    sheets.forEach((items, sheet) => {
+        for (const item of items) {
+            if (!item.media.every(query => mediaMatches(query, env)))
                 continue;
-            }
-            const selectors = splitOn(item.prelude, ',');
-            const focused = Math.max(...selectors.map(s => specificity(s, {backdrop: false, rtl: env.rtl})));
-            const backdrop = Math.max(...selectors.map(s => specificity(s, {backdrop: true, rtl: env.rtl})));
-            if (focused >= 0 || backdrop >= 0)
-                rules.push({sheet, focused, backdrop, declarations: parseDeclarations(item.body)});
+            if (item.define)
+                defines.set(...item.define);
+            else
+                rules.push({sheet, specificities: item.specificities[env.rtl ? 1 : 0], declarations: item.declarations});
         }
     });
 
-    // GTK keeps colors outside sRGB until it draws them.
-    const drawn = color => color.map(v => Math.min(Math.max(v, 0), 1));
-    const shadow = layers => layers.map(layer => ({...layer, color: drawn(layer.color)}));
+    // GTK leaves no room around a maximized window, so none of its shadow shows.
+    const look = (values, shadowed) => {
+        const style = values.get('outline-style');
+        return {
+            outlineWidth: style === 'none' || style === 'hidden' ? 0 : values.get('outline-width'),
+            outlineOffset: values.get('outline-offset'),
+            outlineColor: drawnColor(values.get('outline-color')),
+            shadow: shadowed ? values.get('box-shadow').map(layer => ({...layer, color: drawnColor(layer.color)})) : [],
+        };
+    };
+    const state = (focused, backdrop, shadowed = true) => ({
+        radii: CORNERS.map(corner => focused.get(corner)),
+        focused: look(focused, shadowed),
+        backdrop: look(backdrop, shadowed),
+    });
 
-    const values = computeState(rules, 'focused', defines, env.colorName);
-    const style = values.get('outline-style');
+    // Looks whose rules match alike cascade alike, so each is computed once.
+    const values = [];
+    for (let i = 0; i < LOOKS.length; i++) {
+        const same = values.findIndex((_, j) => rules.every(rule => rule.specificities[j] === rule.specificities[i]));
+        values.push(same >= 0 ? values[same] : computeState(rules, i, defines, env.colorName));
+    }
+    const [normal, backdrop, tiled, tiledBackdrop, maximized, maximizedBackdrop] = values;
     return {
-        radii: CORNERS.map(corner => values.get(corner)),
-        outlineWidth: style === 'none' || style === 'hidden' ? 0 : values.get('outline-width'),
-        outlineOffset: values.get('outline-offset'),
-        outlineColor: drawn(values.get('outline-color')),
-        shadow: shadow(values.get('box-shadow')),
-        shadowBackdrop: shadow(computeState(rules, 'backdrop', defines, env.colorName).get('box-shadow')),
+        normal: state(normal, backdrop),
+        tiled: state(tiled, tiledBackdrop),
+        maximized: state(maximized, maximizedBackdrop, false),
     };
 }

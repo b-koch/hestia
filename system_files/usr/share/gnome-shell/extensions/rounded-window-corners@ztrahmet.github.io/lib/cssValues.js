@@ -83,12 +83,10 @@ function dimension(n, unit = '') {
 }
 
 /**
- * Reads a number, percentage, length in px or angle, with calc(), min(),
- * max() and clamp().
+ * Reads a number, percentage, length in px or angle, with calc(), min(), max() and clamp().
  *
  * @param {string} text
- * @param {Map<string, number>} [keywords] - Names that stand for numbers,
- *   like the channels of a relative color.
+ * @param {Map<string, number>} [keywords] - Names that stand for numbers, like the channels of a relative color.
  * @returns {?{n: number, unit: string}} The unit is '', '%', 'px' or 'deg'.
  */
 export function evaluate(text, keywords = new Map()) {
@@ -260,6 +258,8 @@ const SPACES = new Map([
     }],
 ]);
 
+// Color functions and color-mix(), from GTK's gtk/gtkcsscolorvalue.c and gtk/gtkcsscolor.c (LGPL-2.1-or-later).
+
 // A channel's name in relative colors, the range a percentage spans, and the range an absolute value is clamped to.
 const channel = (name, min, max, low = min, high = max) => ({name, min, max, low, high});
 const HUE = {name: 'h', hue: true};
@@ -268,8 +268,10 @@ const FUNCTIONS = new Map([
     ['rgb', {space: 'srgb', scale: 255, channels: ['r', 'g', 'b'].map(n => channel(n, 0, 255))}],
     ['hsl', {space: 'hsl', channels: [HUE, channel('s', 0, 100), channel('l', 0, 100)]}],
     ['hwb', {space: 'hwb', channels: [HUE, channel('w', 0, 100), channel('b', 0, 100)]}],
-    ['oklab', {space: 'oklab', channels: [channel('l', 0, 1), channel('a', -0.4, 0.4, -Infinity, Infinity),
-        channel('b', -0.4, 0.4, -Infinity, Infinity)]}],
+    ['oklab', {
+        space: 'oklab',
+        channels: [channel('l', 0, 1), channel('a', -0.4, 0.4, -Infinity, Infinity), channel('b', -0.4, 0.4, -Infinity, Infinity)],
+    }],
     ['oklch', {space: 'oklch', channels: [channel('l', 0, 1), channel('c', 0, 0.4, 0, Infinity), HUE]}],
 ]);
 FUNCTIONS.set('rgba', FUNCTIONS.get('rgb'));
@@ -306,7 +308,7 @@ function parseFunction(name, args, names) {
             clamped = !/@|currentcolor/i.test(tokens[1]);
             tokens = tokens.slice(2);
         }
-        if (tokens.length !== 3 || extra.length > 0 || alpha?.trim() === '')
+        if (tokens.length !== 3 || extra.length > 0)
             return null;
         parts = [...tokens, alpha?.trim()];
     }
@@ -433,12 +435,21 @@ function parseLegacy(name, args, names) {
 }
 
 /**
- * Reads a color as GTK does. Like GTK, the channels may lie outside sRGB
- * until the color is drawn; the alpha is always in 0..1.
+ * Clamps a color to sRGB, as GTK does only when it draws it.
+ *
+ * @param {number[]} color - RGBA.
+ * @returns {number[]}
+ */
+export function drawnColor(color) {
+    return color.map(v => clamp(v, 0, 1));
+}
+
+/**
+ * Reads a color as GTK does. Like GTK, the channels may lie outside sRGB until the color is drawn;
+ * the alpha is always in 0..1.
  *
  * @param {string} value
- * @param {function(string): ?number[]} names - Resolves currentColor, color
- *   names and names given by define-color.
+ * @param {function(string): ?number[]} names - Resolves currentColor, color names and names given by define-color.
  * @returns {?number[]} RGBA.
  */
 export function parseColor(value, names) {
