@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.rounded-window-corners-native"
+          path="/org/gnome/shell/extensions/rounded-window-corners-native/">
+    <key name="round-libadwaita-apps" type="b">
+      <default>false</default>
+      <summary>Round libadwaita apps like any other app</summary>
+    </key>
+    <key name="round-libhandy-apps" type="b">
+      <default>true</default>
+      <summary>Round libhandy apps like any other app</summary>
+    </key>
+    <key name="round-maximized" type="b">
+      <default>false</default>
+      <summary>Keep maximized and tiled windows rounded</summary>
+      <description>Their outline and shadow follow libadwaita. Fullscreen windows stay square.</description>
+    </key>
+    <key name="use-allowlist" type="b">
+      <default>false</default>
+      <summary>Use the allowlist instead of the blocklist</summary>
+    </key>
+    <key name="blocklist" type="as">
+      <default>[]</default>
+      <summary>Desktop IDs of the apps that are not rounded</summary>
+    </key>
+    <key name="allowlist" type="as">
+      <default>[]</default>
+      <summary>Desktop IDs of the only apps that are rounded</summary>
+    </key>
+    <key name="blocklist-toolkits" type="as">
+      <default>[]</default>
+      <summary>Toolkits whose apps are not rounded</summary>
+      <description>Toolkits: libadwaita, libhandy, chromium, firefox, java, qt, gtk4 and gtk3.</description>
+    </key>
+    <key name="allowlist-toolkits" type="as">
+      <default>[]</default>
+      <summary>Toolkits whose apps are rounded with the allowlist</summary>
+      <description>Toolkits as in blocklist-toolkits.</description>
+    </key>
+    <key name="custom-style" type="b">
+      <default>false</default>
+      <summary>Use this style instead of libadwaita’s style and gtk.css</summary>
+      <description>An app’s style comes first, then its toolkit’s, then this one.</description>
+    </key>
+    <key name="corner-radius" type="i">
+      <range min="0" max="48"/>
+      <default>15</default>
+      <summary>Corner radius in pixels</summary>
+    </key>
+    <key name="outline-width" type="i">
+      <range min="0" max="8"/>
+      <default>1</default>
+      <summary>Width of the outline, in pixels</summary>
+    </key>
+    <key name="outline-position" type="s">
+      <choices>
+        <choice value="inside"/>
+        <choice value="center"/>
+        <choice value="outside"/>
+      </choices>
+      <default>'inside'</default>
+      <summary>Where the outline sits against the window’s edge</summary>
+    </key>
+    <key name="outline-color" type="s">
+      <default>'rgb(255,255,255)'</default>
+      <summary>Color of the outline</summary>
+      <description>A CSS color such as rgb(255,255,255) or #ffffff. Color names are not read.</description>
+    </key>
+    <key name="outline-opacity" type="d">
+      <range min="0" max="1"/>
+      <default>0.07</default>
+      <summary>Opacity of the outline</summary>
+    </key>
+    <key name="shadow-angle" type="i">
+      <range min="0" max="359"/>
+      <default>90</default>
+      <summary>Direction the light comes from, in degrees</summary>
+      <description>Counter-clockwise from the right. The shadow moves the other way.</description>
+    </key>
+    <key name="shadow-distance" type="i">
+      <range min="0" max="32"/>
+      <default>0</default>
+      <summary>How far the shadow is moved, in pixels</summary>
+    </key>
+    <key name="shadow-blur" type="i">
+      <range min="0" max="48"/>
+      <default>14</default>
+      <summary>Blur of the shadow, in pixels</summary>
+      <description>Of libadwaita’s main shadow layer. Its other layers follow in proportion.</description>
+    </key>
+    <key name="shadow-color" type="s">
+      <default>'rgb(0,0,0)'</default>
+      <summary>Color of the shadow</summary>
+      <description>A CSS color such as rgb(0,0,0) or #000000. Color names are not read.</description>
+    </key>
+    <key name="shadow-opacity" type="d">
+      <range min="0" max="1"/>
+      <default>0.15</default>
+      <summary>Opacity of the shadow</summary>
+      <description>Of libadwaita’s main shadow layer. Its other layers follow in proportion.</description>
+    </key>
+    <key name="border-method" type="s">
+      <choices>
+        <choice value="off"/>
+        <choice value="extend"/>
+        <choice value="clip"/>
+      </choices>
+      <default>'extend'</default>
+      <summary>How the app’s own border is hidden</summary>
+      <description>off leaves it, extend paints over it with the pixels next to it, and clip cuts it off.</description>
+    </key>
+    <key name="border-width" type="i">
+      <range min="1" max="8"/>
+      <default>1</default>
+      <summary>Width of the app’s own border, in pixels</summary>
+    </key>
+    <key name="app-styles" type="a{sa{sv}}">
+      <default>{}</default>
+      <summary>Styles of their own, by the apps’ desktop IDs</summary>
+      <description>Each holds any of the keys from custom-style to border-width that it sets; the others keep their defaults. Without a border-method, the toolkit’s style decides how the app’s border is hidden, then the general one.</description>
+    </key>
+    <key name="toolkit-styles" type="a{sa{sv}}">
+      <default>{'chromium': {'border-method': &lt;'off'&gt;}, 'firefox': {'border-method': &lt;'off'&gt;}, 'gtk4': {'border-method': &lt;'off'&gt;}, 'gtk3': {'border-method': &lt;'off'&gt;}}</default>
+      <summary>Styles of their own, by toolkit</summary>
+      <description>As in app-styles, by the toolkits in blocklist-toolkits. Those listed by default draw little or no border of their own, so they leave it alone.</description>
+    </key>
+  </schema>
+</schemalist>

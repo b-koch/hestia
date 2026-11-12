@@ -12,7 +12,8 @@ import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {FALLBACK_CSS, readWindowStyle, stripComments} from './cssParse.js';
+import {FALLBACK_CSS, parseStylesheet, readWindowStyle, stripComments} from './cssParse.js';
+import {compileStyle} from './shadowProfile.js';
 
 Gio._promisify(Gio.File.prototype, 'load_contents_async');
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
@@ -50,17 +51,16 @@ export class StyleResolver {
         this._cancellable = new Gio.Cancellable();
         this._userCss = Gio.File.new_for_path(
             GLib.build_filenamev([GLib.get_user_config_dir(), 'gtk-4.0', 'gtk.css']));
-        this._sheets = ['', ''];
+        // Parsed once each; the built-in copy stands in for libadwaita's until that is read.
+        this._sheets = [parseStylesheet(FALLBACK_CSS), []];
         this._libadwaita = null;
         this._serial = 0;
         this._monitors = [];
 
+        const update = () => this._update();
         this._settings = St.Settings.get();
-        this._signals = [
-            this._settings.connect('notify::color-scheme', () => this._update()),
-            this._settings.connect('notify::high-contrast', () => this._update()),
-            this._settings.connect('notify::accent-color', () => this._update()),
-        ];
+        this._settings.connectObject('notify::color-scheme', update,
+            'notify::high-contrast', update, 'notify::accent-color', update, this);
 
         this.style = this._compute();
         this._watch([this._userCss]);
@@ -69,25 +69,23 @@ export class StyleResolver {
 
     destroy() {
         this._cancellable.cancel();
-
-        for (const id of this._signals)
-            this._settings.disconnect(id);
+        this._settings.disconnectObject(this);
         this._unwatch();
     }
 
-    // libadwaita adds the accent color in a stylesheet of its own, and GTK names the desktop's accent_color.
+    // libadwaita adds the accent in a stylesheet of its own; GTK names the desktop's accent_color.
     _compute() {
         const [libadwaita, user] = this._sheets;
         const accentColor = ACCENT_COLORS.get(this._settings.accentColor);
-        const accent = `@define-color accent_bg_color ${accentColor};
+        const accent = parseStylesheet(`@define-color accent_bg_color ${accentColor};
             @define-color accent_fg_color white;
-            @define-color accent_color ${accentColor};`;
-        return readWindowStyle([libadwaita || FALLBACK_CSS, accent, user], {
+            @define-color accent_color ${accentColor};`);
+        return compileStyle(readWindowStyle([libadwaita, accent, user], {
             dark: this._settings.colorScheme === St.SystemColorScheme.PREFER_DARK,
             highContrast: this._settings.highContrast,
             rtl: Clutter.get_default_text_direction() === Clutter.TextDirection.RTL,
             colorName,
-        });
+        }));
     }
 
     _update() {
@@ -100,7 +98,7 @@ export class StyleResolver {
 
     async _reload() {
         const serial = ++this._serial;
-        this._libadwaita ??= this._readLibadwaita();
+        this._libadwaita ??= this._readLibadwaita().then(css => parseStylesheet(css || FALLBACK_CSS));
         const files = [];
         const [libadwaita, user] = await Promise.all([
             this._libadwaita,
@@ -109,7 +107,7 @@ export class StyleResolver {
         if (serial !== this._serial || this._cancellable.is_cancelled())
             return;
 
-        this._sheets = [libadwaita, user];
+        this._sheets = [libadwaita, parseStylesheet(user)];
         this._watch(files);
         this._update();
     }
@@ -154,13 +152,18 @@ export class StyleResolver {
         this._unwatch();
         for (const file of files) {
             const monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
-            this._monitors.push([monitor, monitor.connect('changed', () => this._reload())]);
+            // Each save ends with one of these.
+            monitor.connectObject('changed', (_monitor, _file, _other, event) => {
+                if (event === Gio.FileMonitorEvent.CHANGES_DONE_HINT || event === Gio.FileMonitorEvent.DELETED)
+                    this._reload();
+            }, this);
+            this._monitors.push(monitor);
         }
     }
 
     _unwatch() {
-        for (const [monitor, id] of this._monitors) {
-            monitor.disconnect(id);
+        for (const monitor of this._monitors) {
+            monitor.disconnectObject(this);
             monitor.cancel();
         }
         this._monitors = [];

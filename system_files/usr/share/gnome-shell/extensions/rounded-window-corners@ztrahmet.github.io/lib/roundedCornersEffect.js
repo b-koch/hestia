@@ -25,6 +25,7 @@ uniform vec4 fboMap;
 uniform float texelScale;
 uniform float smear;
 uniform float borderRemovalWidth;
+uniform float clip;
 
 uniform float outlineWidth;
 uniform float outlineOffset;
@@ -129,11 +130,12 @@ vec2 removalSample(vec2 p, vec2 halfSize, float r, float d) {
     vec2 edge = halfSize - abs(p);
     float reach = borderRemovalWidth + (0.5 + smear) / texelScale;
 
-    if (q.x <= 0.0 || q.y <= 0.0 || max(edge.x, edge.y) < reach)
+    // Near an edge, as along the sides, so the arc doesn't pull the app's border lines in.
+    if (q.x <= 0.0 || q.y <= 0.0 || min(edge.x, edge.y) < reach)
         return p - sign(p) * max(vec2(reach) - edge, 0.0);
 
     // Parallel to the nearer edge, so lines running into the arc stay straight.
-    bool alongY = edge.x >= reach && (edge.y < reach || edge.x < edge.y);
+    bool alongY = edge.x < edge.y;
     vec2 dir = alongY ? vec2(0.0, -sign(p.y)) : vec2(-sign(p.x), 0.0);
     float inward = dot(dir, -sign(p) * normalize(q));
     return p + dir * max(reach + d, 0.0) / max(inward, 0.25);
@@ -144,13 +146,16 @@ const CODE = `
 // Already applied to cogl_color_out, but not to what is added to it.
 float opacity = cogl_color_in.a;
 
-vec2 halfSize = (bounds.zw - bounds.xy) * 0.5;
+float removalWidth = borderRemovalWidth > 0.0 ? borderRemovalWidth + 2.0 * smear / texelScale : 0.0;
+
+// Cutting the border off moves the window's edge, and so its outline and shadow, in.
+vec2 halfSize = (bounds.zw - bounds.xy) * 0.5 - clip * removalWidth;
+removalWidth *= 1.0 - clip;
+
 vec2 p = fboMap.xy + cogl_tex_coord0_in.xy * fboMap.zw - (bounds.xy + bounds.zw) * 0.5;
 float maxRadius = min(halfSize.x, halfSize.y);
 float r = min(cornerRadius(radii, p), maxRadius);
 float d = sdRoundRect(p, halfSize, r);
-
-float removalWidth = borderRemovalWidth + 2.0 * smear / texelScale;
 
 // Deeper inside the window there is nothing to replace or draw over.
 if (d > -(max(removalWidth, -outlineOffset) + 0.5 / texelScale)) {
@@ -162,10 +167,13 @@ if (d > -(max(removalWidth, -outlineOffset) + 0.5 / texelScale)) {
         cogl_color_out = mix(cogl_color_out, texture2D(cogl_sampler0, st) * opacity, removalBand / content);
     }
 
-    cogl_color_out *= content;
-
-    if (content < 1.0)
-        cogl_color_out += shadow(p, halfSize) * (1.0 - content) * opacity;
+    // GTK clips the window's background and its content each, over a shadow drawn only outside.
+    if (content < 1.0) {
+        float uncovered = 1.0 - content;
+        // Once at fractional scales, so edges don't pulse as the window moves.
+        float layer = smear > 0.0 ? 1.0 : uncovered;
+        cogl_color_out = mix(cogl_color_out, shadow(p, halfSize) * layer * opacity, uncovered * layer);
+    }
 
     // GTK draws the outline over the window and its shadow.
     float outlineBand = coverage(d - outlineOffset - outlineWidth) - coverage(d - outlineOffset);
@@ -179,6 +187,7 @@ class RoundedCornersEffect extends Clutter.ShaderEffect {
     constructor() {
         super();
         this._smear = 0;
+        this._borderWidth = 0;
     }
 
     vfunc_get_static_snippet() {
@@ -220,7 +229,8 @@ class RoundedCornersEffect extends Clutter.ShaderEffect {
             this._smear = Math.max(...views.map(view => view.get_scale())) % 1 === 0 ? 0 : 1;
         this.set_uniform_float('smear', 1, [this._smear]);
 
-        // An app drawing at a fractional scale blurs its 1 px border over one more of its pixels.
+        // An app at a fractional scale blurs its border one pixel further.
+        // A stretched buffer, like a video player's 1x1 one, has none.
         const content = actor.get_texture();
         const buffer = content ? content.get_texture() : null;
         let appScale = 1;
@@ -228,31 +238,33 @@ class RoundedCornersEffect extends Clutter.ShaderEffect {
             const [, logicalWidth, logicalHeight] = content.get_preferred_size();
             appScale = Math.sqrt(buffer.get_width() * buffer.get_height() / (logicalWidth * logicalHeight));
         }
-        this.set_uniform_float('borderRemovalWidth', 1, [appScale % 1 === 0 ? 1 : 1 + 1 / appScale]);
+        const blur = appScale > 1 && appScale % 1 !== 0 ? 1 / appScale : 0;
+        this.set_uniform_float('borderRemovalWidth', 1, [this._borderWidth > 0 ? this._borderWidth + blur : 0]);
     }
 
     /**
      * @param {number[]} bounds - Frame rect [x1, y1, x2, y2], in actor pixels.
      * @param {number[]} radii - Clockwise from top-left, in actor pixels.
-     * @param {number} outlineWidth
-     * @param {number} outlineOffset
-     * @param {number[]} outlineColor - RGBA.
-     * @param {Array<object>} shadow - From compileShadow().
+     * @param {object} look - A look from compileStyle().
+     * @param {string} border - How the app's own border is hidden: 'off', 'clip', or else extended.
+     * @param {number} borderWidth
      */
-    update(bounds, radii, outlineWidth, outlineOffset, outlineColor, shadow) {
+    update(bounds, radii, look, border, borderWidth) {
+        this._borderWidth = border === 'off' ? 0 : borderWidth;
+        this.set_uniform_float('clip', 1, [border === 'clip' ? 1 : 0]);
         this.set_uniform_float('bounds', 4, bounds);
         this.set_uniform_float('radii', 4, radii);
-        this.set_uniform_float('outlineWidth', 1, [outlineWidth]);
-        this.set_uniform_float('outlineOffset', 1, [outlineOffset]);
-        this.set_uniform_float('outlineColor', 4, outlineColor);
-        shadow.forEach(({shape, color}, i) => {
+        this.set_uniform_float('outlineWidth', 1, [look.outlineWidth]);
+        this.set_uniform_float('outlineOffset', 1, [look.outlineOffset]);
+        this.set_uniform_float('outlineColor', 4, look.outlineColor);
+        look.slots.forEach(({shape, color}, i) => {
             this.set_uniform_float(`shadowShape${i}`, 4, shape);
             this.set_uniform_float(`shadowColor${i}`, 4, color);
         });
     }
 });
 
-// Room for the shadow and outline. It goes first, since an offscreen effect sizes itself from the effects before it.
+// Room for the shadow and outline, given to the offscreen effect after it.
 export const ShadowRoomEffect = GObject.registerClass(
 class ShadowRoomEffect extends Clutter.Effect {
     constructor() {

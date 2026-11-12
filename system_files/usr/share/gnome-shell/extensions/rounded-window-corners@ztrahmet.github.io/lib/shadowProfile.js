@@ -1,5 +1,5 @@
 /**
- * Box-shadow compiler for shader uniforms
+ * Box-shadow compiler for shader uniforms, and the room a style needs
  *
  * @author     Ahmet Öztürk <141689708+ztrahmet@users.noreply.github.com>
  * @copyright  2026 Ahmet Öztürk
@@ -28,8 +28,8 @@ export function shadowExtent(layers) {
 }
 
 /**
- * Compiles box-shadow layers into the shader's slots, in the order GTK draws
- * them. With more layers than slots, the faintest are left out.
+ * Compiles box-shadow layers into the shader's slots, in the order GTK draws them.
+ * With more layers than slots, the faintest are left out.
  *
  * @param {Array<object>} layers - From parseBoxShadow(), so none is transparent.
  * @returns {Array<{shape: number[], color: number[]}>} Each shape is [dx, dy, spread, sigma].
@@ -39,4 +39,24 @@ export function compileShadow(layers) {
     const slots = layers.filter(layer => kept.has(layer))
         .map(layer => ({shape: [layer.dx, layer.dy, layer.spread, sigmaOf(layer)], color: layer.color}));
     return Array.from({length: SHADOW_SLOTS}, (_, i) => slots[i] ?? EMPTY_SLOT);
+}
+
+/**
+ * Adds each look's shader slots, and each state's room and whether it draws an outline or shadow.
+ *
+ * @param {object} style - From readWindowStyle() or customStyle().
+ * @returns {object} The style, with each look's slots and each state's reach in pixels and draws.
+ */
+export function compileStyle(style) {
+    const compile = ({radii, focused, backdrop}) => ({
+        radii,
+        focused: {...focused, slots: compileShadow(focused.shadow)},
+        backdrop: {...backdrop, slots: compileShadow(backdrop.shadow)},
+        // Room for both looks, so it doesn't change with focus.
+        reach: Math.max(...[focused, backdrop].map(look =>
+            Math.max(shadowExtent(look.shadow), look.outlineOffset + look.outlineWidth))) + 1,
+        draws: [focused, backdrop].some(look =>
+            look.shadow.length > 0 || (look.outlineWidth > 0 && look.outlineColor[3] > 0)),
+    });
+    return {normal: compile(style.normal), tiled: compile(style.tiled), maximized: compile(style.maximized)};
 }
