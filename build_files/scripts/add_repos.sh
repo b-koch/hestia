@@ -26,4 +26,6 @@ for repo in /ctx/repos/*.repo; do
     done < <(grep -E '^\s*gpgkey\s*=' "$repo" | sed 's/.*=\s*//')
 done
 
+dnf5 config-manager addrepo --from-repofile=https://repository.mullvad.net/rpm/stable/mullvad.repo
+
 enable_coprs
