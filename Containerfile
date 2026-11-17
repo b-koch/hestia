@@ -5,7 +5,7 @@ COPY system_files /system_files
 
 # Base Image
 # Universal Blue Images: https://github.com/orgs/ublue-os/packages
-FROM ghcr.io/ublue-os/bazzite-gnome:stable@sha256:047d9615bf169d3c64244e1e18fb0bc5378192f791433eec175b0564e282c89a
+FROM ghcr.io/ublue-os/bazzite-gnome:stable@sha256:d32d66e14810d6d7bc68b5c06f90eaad99f465e8ffd5f50f1fbdabb7b2ef3317
 
 RUN rm -rf /opt && mkdir -p /opt
 
