@@ -1,0 +1,334 @@
+import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Gtk from 'gi://Gtk';
+
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+
+const COMBO_OPTIONS = [
+    ['', 'Auto'],
+    ['bluetooth', 'Bluetooth'],
+    ['headphone', 'Headphone'],
+    ['earbuds', 'Earbuds'],
+    ['speaker', 'Speaker'],
+    ['controller', 'Controller'],
+    ['mouse', 'Mouse'],
+    ['keyboard', 'Keyboard'],
+    ['phone', 'Phone'],
+    ['tv', 'TV'],
+    ['tablet', 'Tablet'],
+    ['watch', 'Watch'],
+    ['car', 'Car'],
+];
+
+export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
+    fillPreferencesWindow(window) {
+        const settings = this.getSettings();
+
+        const page = new Adw.PreferencesPage();
+        const group = new Adw.PreferencesGroup();
+        page.add(group);
+
+        const updateIntervalRow = new Adw.SpinRow({
+            title: 'Update Interval (minutes)',
+            adjustment: new Gtk.Adjustment({
+                lower: 1,
+                upper: 60,
+                step_increment: 1,
+                page_increment: 10,
+                value: settings.get_int('update-interval'),
+            }),
+        });
+        settings.bind('update-interval', updateIntervalRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+        group.add(updateIntervalRow);
+
+        const alwaysShowRow = new Adw.SwitchRow({
+            title: 'Always show percentage',
+            subtitle: 'Keep the battery percentage always visible in the panel',
+        });
+        settings.bind('always-show-percentage', alwaysShowRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        group.add(alwaysShowRow);
+
+        const showHoverRow = new Adw.SwitchRow({
+            title: 'Show percentage on hover',
+            subtitle: 'When "Always show" is off: show percentage on hover. Disable to prevent layout shifts.',
+        });
+        settings.bind('show-hover-percentage', showHoverRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        group.add(showHoverRow);
+
+        const updateHoverSensitivity = () => {
+            showHoverRow.sensitive = !settings.get_boolean('always-show-percentage');
+        };
+        updateHoverSensitivity();
+        settings.connect('changed::always-show-percentage', updateHoverSensitivity);
+
+        const hideOriginalRow = new Adw.SwitchRow({
+            title: 'Hide original Bluetooth icon',
+            subtitle: 'Hide the built-in Bluetooth status icon and only show this extension',
+        });
+        settings.bind('hide-original-bluetooth-icon', hideOriginalRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+
+        const advancedRow = new Adw.SwitchRow({
+            title: 'Advanced Settings',
+            subtitle: 'Enable custom layout parameters (padding and spacing)',
+            active: settings.get_boolean('show-advanced-settings'),
+        });
+
+        const positioningGroup = new Adw.PreferencesGroup({
+            title: 'Positioning',
+        });
+        page.add(positioningGroup);
+
+        const standaloneRow = new Adw.SwitchRow({
+            title: 'Separate top bar button',
+            subtitle: 'Show the indicator outside Quick Settings as its own button with a device list',
+        });
+        settings.bind('use-standalone-button', standaloneRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        positioningGroup.add(standaloneRow);
+
+        const BOX_OPTIONS = [
+            ['left', 'Panel: Left Box'],
+            ['center', 'Panel: Center Box'],
+            ['right', 'Panel: Right Box'],
+        ];
+        const boxModel = Gtk.StringList.new(BOX_OPTIONS.map(([, label]) => label));
+        const currentBox = settings.get_string('position-box') || 'right';
+        const selectedBoxIdx = BOX_OPTIONS.findIndex(([val]) => val === currentBox);
+
+        const containerTargetRow = new Adw.ComboRow({
+            title: 'Container Target',
+            subtitle: 'Select which area of the top panel to place the button in',
+            model: boxModel,
+            selected: selectedBoxIdx >= 0 ? selectedBoxIdx : 2,
+        });
+        containerTargetRow.connect('notify::selected', (row) => {
+            const idx = row.selected;
+            const val = BOX_OPTIONS[idx]?.[0] ?? 'right';
+            if (settings.get_string('position-box') !== val) {
+                settings.set_string('position-box', val);
+            }
+        });
+        positioningGroup.add(containerTargetRow);
+
+        const updateBoxSelection = () => {
+            const val = settings.get_string('position-box') || 'right';
+            const idx = BOX_OPTIONS.findIndex(([o]) => o === val);
+            if (idx >= 0 && containerTargetRow.selected !== idx) {
+                containerTargetRow.selected = idx;
+            }
+        };
+        settings.connect('changed::position-box', updateBoxSelection);
+
+        const positionIndexRow = new Adw.SpinRow({
+            title: 'Position Index',
+            subtitle: 'Order within the box (-1 for Auto, 0 is leftmost)',
+            adjustment: new Gtk.Adjustment({
+                lower: -1,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('position-index'),
+            }),
+        });
+        settings.bind('position-index', positionIndexRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+        positioningGroup.add(positionIndexRow);
+        positioningGroup.add(hideOriginalRow);
+
+        const hpaddingRow = new Adw.SpinRow({
+            title: 'Inner Horizontal Padding',
+            subtitle: 'Padding inside the widget capsule (default: 12)',
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('hpadding'),
+            }),
+        });
+        settings.bind('hpadding', hpaddingRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+
+        const outerMarginRow = new Adw.SpinRow({
+            title: 'Outer Margin (Widget Spacing)',
+            subtitle: 'Extra space around the widget (0 = default, higher = more space)',
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('outer-margin'),
+            }),
+        });
+        settings.bind('outer-margin', outerMarginRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+
+        let isInternalChange = false;
+        advancedRow.connect('notify::active', () => {
+            if (isInternalChange) return;
+            const active = advancedRow.active;
+            if (active) {
+                isInternalChange = true;
+                advancedRow.active = false;
+                isInternalChange = false;
+
+                const dialogProps = {
+                    heading: 'Enable Advanced Settings?',
+                    body: 'Warning: Changing these layout properties can cause UI rendering issues or crash the GNOME Shell top panel. Please configure them with caution.',
+                };
+                const dialog = Adw.AlertDialog
+                    ? new Adw.AlertDialog(dialogProps)
+                    : new Adw.MessageDialog({...dialogProps, transient_for: window});
+
+                dialog.add_response('cancel', 'Cancel');
+                dialog.add_response('enable', 'Enable');
+                dialog.set_response_appearance('enable', Adw.ResponseAppearance.DESTRUCTIVE);
+                dialog.set_default_response('cancel');
+                dialog.set_close_response('cancel');
+
+                dialog.connect('response', (_dlg, responseId) => {
+                    if (responseId === 'enable')
+                        settings.set_boolean('show-advanced-settings', true);
+                });
+
+                if (Adw.AlertDialog)
+                    dialog.present(window);
+                else
+                    dialog.present();
+            } else {
+                settings.set_boolean('show-advanced-settings', false);
+            }
+        });
+
+        const updateAdvancedGroupVisibility = () => {
+            const enabled = settings.get_boolean('show-advanced-settings');
+            const standalone = settings.get_boolean('use-standalone-button');
+            containerTargetRow.visible = standalone;
+            positionIndexRow.visible = standalone;
+            hideOriginalRow.visible = standalone;
+            advancedRow.visible = standalone;
+            hpaddingRow.visible = standalone && enabled;
+            outerMarginRow.visible = standalone && enabled;
+            if (advancedRow.active !== enabled) {
+                isInternalChange = true;
+                advancedRow.active = enabled;
+                isInternalChange = false;
+            }
+        };
+        settings.connect('changed::show-advanced-settings', updateAdvancedGroupVisibility);
+        settings.connect('changed::use-standalone-button', updateAdvancedGroupVisibility);
+        updateAdvancedGroupVisibility();
+
+        const overrideGroup = new Adw.PreferencesGroup({
+            title: 'Device icons',
+            description: 'Choose icon type for each device. Set to Auto for automatic detection.',
+        });
+        page.add(overrideGroup);
+
+        const model = Gtk.StringList.new(COMBO_OPTIONS.map(([, label]) => label));
+        let deviceRows = [];
+
+        function getOverrideFor(modelName) {
+            const overrides = settings.get_strv('device-overrides');
+            for (const entry of overrides) {
+                const i = entry.lastIndexOf('|');
+                if (i <= 0) continue;
+                if (entry.slice(0, i).toLowerCase().trim() === modelName.toLowerCase().trim())
+                    return entry.slice(i + 1);
+            }
+            return '';
+        }
+
+        function setOverride(modelName, type) {
+            const overrides = settings.get_strv('device-overrides');
+            const filtered = overrides.filter(e => {
+                const i = e.lastIndexOf('|');
+                return i > 0 && e.slice(0, i).toLowerCase().trim() !== modelName.toLowerCase().trim();
+            });
+            if (type)
+                filtered.push(`${modelName.trim()}|${type}`);
+            settings.set_strv('device-overrides', filtered);
+        }
+
+        function buildDeviceList() {
+            for (const row of deviceRows)
+                overrideGroup.remove(row);
+            deviceRows = [];
+            try {
+                const bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, null);
+                const paths = bus.call_sync('org.freedesktop.UPower', '/org/freedesktop/UPower', 'org.freedesktop.UPower', 'EnumerateDevices', null, null, Gio.DBusCallFlags.NONE, -1, null).deep_unpack()[0];
+                for (const path of paths) {
+                    if (path.includes('battery_BAT') || path.includes('line_power'))
+                        continue;
+                    try {
+                        const proxy = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, null, 'org.freedesktop.UPower', path, 'org.freedesktop.DBus.Properties', null);
+                        const result = proxy.call_sync('GetAll', new GLib.Variant('(s)', ['org.freedesktop.UPower.Device']), Gio.DBusCallFlags.NONE, -1, null);
+                        const props = result.deep_unpack()[0];
+                        const modelVal = props['Model'];
+                        const name = (modelVal?.deep_unpack ? modelVal.deep_unpack() : modelVal) || 'Unknown';
+                        const presentVal = props['IsPresent'];
+                        const present = presentVal?.deep_unpack ? presentVal.deep_unpack() : presentVal;
+                        if (!present) continue;
+                        const currentOverride = getOverrideFor(name);
+                        const selectedIdx = COMBO_OPTIONS.findIndex(([t]) => t === currentOverride);
+                        const comboRow = new Adw.ComboRow({
+                            title: String(name),
+                            model,
+                            selected: selectedIdx >= 0 ? selectedIdx : 0,
+                        });
+                        comboRow.connect('notify::selected', (row) => {
+                            const idx = row.selected;
+                            const type = COMBO_OPTIONS[idx]?.[0] ?? '';
+                            setOverride(name, type);
+                        });
+                        overrideGroup.add(comboRow);
+                        deviceRows.push(comboRow);
+                    } catch (_e) { }
+                }
+            } catch (_e) { }
+            if (deviceRows.length === 0) {
+                const emptyRow = new Adw.ActionRow({
+                    title: 'No devices connected',
+                    subtitle: 'Connect a Bluetooth device with battery to configure its icon.',
+                });
+                overrideGroup.add(emptyRow);
+                deviceRows.push(emptyRow);
+            }
+        }
+
+        buildDeviceList();
+
+        const resetGroup = new Adw.PreferencesGroup({
+            title: 'Danger zone',
+        });
+        page.add(resetGroup);
+
+        const resetRow = new Adw.ActionRow({
+            title: 'Reset all settings',
+            subtitle: 'Restore default behavior and clear device icon overrides.',
+        });
+        const resetButton = new Gtk.Button({
+            label: 'Reset',
+            valign: Gtk.Align.CENTER,
+        });
+        resetButton.add_css_class('destructive-action');
+        resetButton.connect('clicked', () => {
+            settings.reset('update-interval');
+            settings.reset('show-hover-percentage');
+            settings.reset('always-show-percentage');
+            settings.reset('hide-original-bluetooth-icon');
+            settings.reset('device-overrides');
+            settings.reset('use-standalone-button');
+            settings.reset('position-box');
+            settings.reset('position-index');
+            settings.reset('show-advanced-settings');
+            settings.reset('hpadding');
+            settings.reset('outer-margin');
+            buildDeviceList();
+        });
+        resetRow.add_suffix(resetButton);
+        resetGroup.add(advancedRow);
+        resetGroup.add(hpaddingRow);
+        resetGroup.add(outerMarginRow);
+        resetGroup.add(resetRow);
+
+        window.add(page);
+    }
+}
