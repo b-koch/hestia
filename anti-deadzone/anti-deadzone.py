@@ -2,18 +2,22 @@
 """
 antideadzone.py (adz) — system-wide stick anti-deadzone & profile CLI for Linux.
 
-Unifies the background evdev/uinput daemon, profile switcher, pause/resume
-controller, and input device inspector into a single executable (typically
-symlinked as `adz`).
+Reads a physical gamepad via evdev, applies deadzone + anti-deadzone
+(+ optional response curve) to the stick axes, and exposes a persistent
+virtual Xbox 360 controller via uinput.
+
+Because the virtual Xbox 360 receiver remains open across physical
+controller disconnects and reconnects, games do not lose their controller
+binding if a wireless pad sleeps, disconnects, or is hot-swapped.
 
 Subcommands:
     adz                         Show status and list available profiles
-    adz list                    Show status and list available profiles
     adz status                  Print concise active/paused state
     adz pause                   Release controller grab & remove virtual device
-    adz resume                  Re-enable virtual device & stick shaping
+    adz resume                  Re-enable virtual receiver & stick shaping
     adz toggle                  Flip between paused and active
     adz switch <profile>        Switch active profile
+    adz list                    List available profiles
     adz devices                 List /dev/input devices and gamepad matches
     adz daemon                  Run the background evdev -> uinput daemon
 """
@@ -91,8 +95,8 @@ NUMERIC_STICK_FIELDS = {
 
 def _import_evdev():
     try:
-        from evdev import InputDevice, UInput, ecodes, list_devices
-        return InputDevice, UInput, ecodes, list_devices
+        from evdev import AbsInfo, InputDevice, UInput, ecodes, list_devices
+        return AbsInfo, InputDevice, UInput, ecodes, list_devices
     except ImportError:
         print(
             "Error: Python package 'evdev' is required for this command.\n"
@@ -162,7 +166,6 @@ def get_running_daemon_pid():
     except OSError:
         return None
 
-    # Verify /proc/<pid>/cmdline matches this script so a recycled PID is never signaled.
     cmdline_path = f"/proc/{pid}/cmdline"
     try:
         with open(cmdline_path, "rb") as f:
@@ -280,11 +283,12 @@ def active_profile(cfg):
 
 
 # ---------------------------------------------------------------------------
-# Stick normalization & deadzone shaping math
+# Axis normalization & deadzone shaping math
 # ---------------------------------------------------------------------------
 
 @dataclass
 class AxisState:
+    """Normalizes a bipolar stick axis from [minimum..maximum] to [-1.0..1.0]."""
     minimum: int
     maximum: int
     center: float = field(init=False)
@@ -299,6 +303,27 @@ class AxisState:
             return 0.0
         v = (raw - self.center) / self.span
         return max(-1.0, min(1.0, v))
+
+
+@dataclass
+class TriggerState:
+    """Normalizes a unipolar analog trigger from [minimum..maximum] to [0..255]."""
+    minimum: int
+    maximum: int
+    span: float = field(init=False)
+
+    def __post_init__(self):
+        self.span = float(self.maximum - self.minimum)
+
+    def normalize_u8(self, raw: int) -> int:
+        if self.span <= 0.0:
+            return 0
+        frac = (raw - self.minimum) / self.span
+        if frac <= 0.0:
+            return 0
+        if frac >= 1.0:
+            return 255
+        return int(round(frac * 255.0))
 
 
 def _clamp(v, lo, hi):
@@ -554,7 +579,7 @@ def is_gamepad_device(dev, ecodes) -> bool:
 
 
 def find_source_device(name_match: str):
-    InputDevice, _, ecodes, list_devices = _import_evdev()
+    _, InputDevice, _, ecodes, list_devices = _import_evdev()
     candidates = []
     for path in sorted(list_devices()):
         try:
@@ -583,7 +608,7 @@ def find_source_device(name_match: str):
 
 
 # ---------------------------------------------------------------------------
-# Daemon runtime
+# Daemon runtime (Persistent Virtual Xbox 360 Receiver)
 # ---------------------------------------------------------------------------
 
 class DeviceWaiter:
@@ -625,7 +650,7 @@ class DeviceWaiter:
                     return src
             return None
 
-        log.info("No controller found; waiting for one to be plugged in...")
+        log.info("Waiting for physical controller (virtual receiver active)...")
         monitor_fd = self.monitor.fileno()
         while running_flag():
             r, _, _ = select.select([monitor_fd, wakeup_fd], [], [], 1.0)
@@ -645,28 +670,50 @@ class DeviceWaiter:
                 time.sleep(0.2)
                 if not running_flag():
                     return None
+                if on_poll_tick and on_poll_tick():
+                    return None
                 src = find_source_device(name_match)
                 if src is not None:
                     return src
         return None
 
 
-def build_uinput(source):
-    _, UInput, ecodes, _ = _import_evdev()
-    caps = {}
-    key_codes = source.capabilities().get(ecodes.EV_KEY, [])
-    if key_codes:
-        caps[ecodes.EV_KEY] = list(key_codes)
+def get_virtual_key_codes(ecodes) -> tuple:
+    return (
+        ecodes.BTN_SOUTH,
+        ecodes.BTN_EAST,
+        ecodes.BTN_NORTH,
+        ecodes.BTN_WEST,
+        ecodes.BTN_TL,
+        ecodes.BTN_TR,
+        ecodes.BTN_SELECT,
+        ecodes.BTN_START,
+        ecodes.BTN_MODE,
+        ecodes.BTN_THUMBL,
+        ecodes.BTN_THUMBR,
+    )
 
-    abs_caps = []
-    for code, info in source.capabilities(absinfo=True).get(ecodes.EV_ABS, []):
-        if code in (ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_RX, ecodes.ABS_RY):
-            new_info = info._replace(min=-32768, max=32767, flat=0, fuzz=0)
-            abs_caps.append((code, new_info))
-        else:
-            abs_caps.append((code, info))
-    if abs_caps:
-        caps[ecodes.EV_ABS] = abs_caps
+
+def build_virtual_xbox360():
+    """Create the persistent canonical Xbox 360 virtual uinput device."""
+    AbsInfo, _, UInput, ecodes, _ = _import_evdev()
+    stick_info = AbsInfo(value=0, min=-32768, max=32767, fuzz=0, flat=0, resolution=0)
+    trigger_info = AbsInfo(value=0, min=0, max=255, fuzz=0, flat=0, resolution=0)
+    hat_info = AbsInfo(value=0, min=-1, max=1, fuzz=0, flat=0, resolution=0)
+
+    caps = {
+        ecodes.EV_KEY: list(get_virtual_key_codes(ecodes)),
+        ecodes.EV_ABS: [
+            (ecodes.ABS_X, stick_info),
+            (ecodes.ABS_Y, stick_info),
+            (ecodes.ABS_RX, stick_info),
+            (ecodes.ABS_RY, stick_info),
+            (ecodes.ABS_Z, trigger_info),
+            (ecodes.ABS_RZ, trigger_info),
+            (ecodes.ABS_HAT0X, hat_info),
+            (ecodes.ABS_HAT0Y, hat_info),
+        ],
+    }
 
     return UInput(
         caps,
@@ -693,7 +740,7 @@ class ConfigWatcher:
         log.info(
             "Active profile: '%s'%s",
             self.profile_name,
-            " [PAUSED — virtual device disabled]" if self.paused else "",
+            " [PAUSED — virtual receiver disabled]" if self.paused else "",
         )
 
     def _current_mtime_ns(self):
@@ -711,9 +758,9 @@ class ConfigWatcher:
             self.cfg["paused"] = paused
             log.info(
                 "Daemon %s",
-                "PAUSED (physical controller released, virtual device closed)"
+                "PAUSED (physical controller released, virtual receiver closed)"
                 if paused
-                else "RESUMED (acquiring controller and virtual device)",
+                else "RESUMED (virtual receiver active)",
             )
 
     def maybe_reload(self, force=False):
@@ -741,7 +788,7 @@ class ConfigWatcher:
         if self.paused != old_paused:
             log.info(
                 "Config reloaded: daemon %s",
-                "PAUSED (virtual device disabled)" if self.paused else "RESUMED",
+                "PAUSED (virtual receiver disabled)" if self.paused else "RESUMED",
             )
         elif self.profile_name != old_profile_name or self.profile != old_profile:
             log.info(
@@ -765,15 +812,31 @@ def float_to_s16(v: float) -> int:
     return int(round(v * 32767))
 
 
-def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag, wakeup_fd: int, reload_flag):
-    _, _, ecodes, _ = _import_evdev()
+def run_receiver_lifecycle(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag, wakeup_fd: int, reload_flag):
+    """Run one active (unpaused) receiver lifecycle.
+
+    Creates a persistent Xbox 360 virtual uinput device once and keeps it
+    alive across physical controller disconnects/reconnects until the daemon
+    is paused or stopped.
+    """
+    _, _, _, ecodes, _ = _import_evdev()
     stick_axes = {
         "left": (ecodes.ABS_X, ecodes.ABS_Y),
         "right": (ecodes.ABS_RX, ecodes.ABS_RY),
     }
+    trigger_codes = {ecodes.ABS_Z, ecodes.ABS_RZ}
+    hat_codes = {ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y}
+    dpad_btn_map = {
+        ecodes.BTN_DPAD_UP: "up",
+        ecodes.BTN_DPAD_DOWN: "down",
+        ecodes.BTN_DPAD_LEFT: "left",
+        ecodes.BTN_DPAD_RIGHT: "right",
+    }
+    virtual_keys = set(get_virtual_key_codes(ecodes))
 
     cfg = watcher.cfg
 
+    # Idle cleanly while paused: no physical grab, no virtual uinput node.
     while running_flag() and watcher.paused:
         select.select([wakeup_fd], [], [], cfg.get("reload_interval", 1.0))
         if not running_flag():
@@ -785,62 +848,47 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag, wake
     if not running_flag():
         return False
 
-    active_match = cfg["device_name_match"]
-
-    def abort_wait_if_paused():
-        forced = reload_flag()
-        watcher.maybe_reload(force=forced)
-        return watcher.paused
-
-    src = waiter.wait_for_device(
-        active_match, running_flag, wakeup_fd, on_poll_tick=abort_wait_if_paused
-    )
-    if src is None:
-        return True
-
-    log.info("Found source device: %s (%s)", src.name, src.path)
-
     try:
-        src.grab()
-    except OSError as e:
-        log.warning("Could not grab %s (%s); continuing ungrabbed", src.path, e)
-
-    axis_state = {}
-    for code, info in src.capabilities(absinfo=True).get(ecodes.EV_ABS, []):
-        axis_state[code] = AxisState(info.min, info.max)
-
-    try:
-        uin = build_uinput(src)
+        uin = build_virtual_xbox360()
     except Exception as e:
-        log.error("Failed to create virtual uinput device: %s", e)
-        try:
-            src.ungrab()
-        except Exception:
-            pass
-        src.close()
+        log.error("Failed to create persistent virtual uinput device: %s", e)
         return False
 
-    log.info("Virtual device up: %s", uin.device.path)
+    log.info("Persistent virtual Xbox 360 receiver up: %s", uin.device.path)
 
     stick_raw = {"left": [0.0, 0.0], "right": [0.0, 0.0]}
-    axis_to_stick_slot = {
-        ecodes.ABS_X: ("left", 0),
-        ecodes.ABS_Y: ("left", 1),
-        ecodes.ABS_RX: ("right", 0),
-        ecodes.ABS_RY: ("right", 1),
-    }
-
-    for code, (stick, slot) in axis_to_stick_slot.items():
-        if code in axis_state:
-            try:
-                stick_raw[stick][slot] = axis_state[code].normalize(src.absinfo(code).value)
-            except OSError:
-                pass
-
-    debug_count = 0
-    last_config_check = 0.0
+    last_sent_time = {"left": 0.0, "right": 0.0}
+    pending = {"left": None, "right": None}
+    pressed_keys = set()
+    dpad_buttons = {"up": 0, "down": 0, "left": 0, "right": 0}
     warned_unknown_shapes = set()
-    disconnected = False
+
+    def reset_virtual_state():
+        """Return all virtual axes, triggers, hats, and held buttons to neutral
+        and clear any deferred rate-limiter samples on physical disconnect."""
+        stick_raw["left"] = [0.0, 0.0]
+        stick_raw["right"] = [0.0, 0.0]
+        pending["left"] = None
+        pending["right"] = None
+        last_sent_time["left"] = 0.0
+        last_sent_time["right"] = 0.0
+        for key_code in list(pressed_keys):
+            uin.write(ecodes.EV_KEY, key_code, 0)
+        pressed_keys.clear()
+        for direction in dpad_buttons:
+            dpad_buttons[direction] = 0
+        for axis_code in (
+            ecodes.ABS_X,
+            ecodes.ABS_Y,
+            ecodes.ABS_RX,
+            ecodes.ABS_RY,
+            ecodes.ABS_Z,
+            ecodes.ABS_RZ,
+            ecodes.ABS_HAT0X,
+            ecodes.ABS_HAT0Y,
+        ):
+            uin.write(ecodes.EV_ABS, axis_code, 0)
+        uin.syn()
 
     def shape_stick(stick, profile):
         scfg = profile[stick]
@@ -864,9 +912,6 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag, wake
             outer_circle_clamp=bool(scfg.get("outer_circle_clamp", shape == "hybrid")),
         )
         return x, y, float_to_s16(nx), float_to_s16(ny)
-
-    last_sent_time = {"left": 0.0, "right": 0.0}
-    pending = {"left": None, "right": None}
 
     def min_interval(profile):
         hz = profile.get("max_output_hz", cfg.get("max_output_hz", 0))
@@ -920,112 +965,201 @@ def run_session(watcher: ConfigWatcher, waiter: DeviceWaiter, running_flag, wake
         return min(waits) if waits else 1.0
 
     try:
-        while running_flag():
-            if watcher.paused:
-                break
+        while running_flag() and not watcher.paused:
+            cfg = watcher.cfg
+            active_match = cfg["device_name_match"]
 
-            now = time.monotonic()
-            forced = reload_flag()
-            if forced or (now - last_config_check >= cfg.get("reload_interval", 1.0)):
-                last_config_check = now
-                if watcher.maybe_reload(force=forced):
-                    if watcher.paused:
-                        break
-                    wrote_reload = False
-                    for stick in ("left", "right"):
-                        _, _, _, _, wrote_now = emit_stick(stick, watcher.profile, now)
-                        wrote_reload = wrote_reload or wrote_now
-                    if wrote_reload:
-                        uin.syn()
-                cfg = watcher.cfg
-                new_match = cfg["device_name_match"]
-                if new_match != active_match:
-                    active_match = new_match
-                    if active_match and active_match.lower() not in src.name.lower():
-                        log.info(
-                            "device_name_match changed to %r; switching controller",
-                            active_match,
-                        )
-                        break
+            def abort_wait_if_state_changed():
+                forced = reload_flag()
+                watcher.maybe_reload(force=forced)
+                if watcher.paused:
+                    return True
+                if watcher.cfg["device_name_match"] != active_match:
+                    return True
+                return False
 
-            if flush_pending_sticks(watcher.profile, now):
-                uin.syn()
-
-            select_timeout = min(
-                cfg.get("reload_interval", 1.0),
-                next_flush_wait(watcher.profile),
+            src = waiter.wait_for_device(
+                active_match,
+                running_flag,
+                wakeup_fd,
+                on_poll_tick=abort_wait_if_state_changed,
             )
-            r, _, _ = select.select([src.fd, wakeup_fd], [], [], select_timeout)
-            if not running_flag() or watcher.paused:
-                break
-            if src.fd not in r:
+            if src is None:
                 continue
 
+            log.info("Attached physical controller: %s (%s)", src.name, src.path)
+
             try:
-                events = list(src.read())
-            except (OSError, BlockingIOError):
-                disconnected = True
-                break
+                src.grab()
+            except OSError as e:
+                log.warning("Could not grab %s (%s); continuing ungrabbed", src.path, e)
 
-            ev_now = time.monotonic()
-            dirty_sticks = set()
-            wrote_any = False
+            axis_state = {}
+            trigger_state = {}
+            for code, info in src.capabilities(absinfo=True).get(ecodes.EV_ABS, []):
+                if code in trigger_codes:
+                    trigger_state[code] = TriggerState(info.min, info.max)
+                else:
+                    axis_state[code] = AxisState(info.min, info.max)
 
-            def flush_frame():
-                nonlocal debug_count, wrote_any
-                if not dirty_sticks:
-                    return
-                for stick in dirty_sticks:
-                    x, y, out_x, out_y, wrote_now = emit_stick(
-                        stick, watcher.profile, ev_now
+            axis_to_stick_slot = {
+                ecodes.ABS_X: ("left", 0),
+                ecodes.ABS_Y: ("left", 1),
+                ecodes.ABS_RX: ("right", 0),
+                ecodes.ABS_RY: ("right", 1),
+            }
+
+            # Sync initial physical axis & trigger positions into the live virtual pad.
+            for code, (stick, slot) in axis_to_stick_slot.items():
+                if code in axis_state:
+                    try:
+                        stick_raw[stick][slot] = axis_state[code].normalize(src.absinfo(code).value)
+                    except OSError:
+                        pass
+            for stick in ("left", "right"):
+                _, _, out_x, out_y = shape_stick(stick, watcher.profile)
+                write_stick(stick, out_x, out_y)
+            for tcode, tstate in trigger_state.items():
+                try:
+                    uin.write(ecodes.EV_ABS, tcode, tstate.normalize_u8(src.absinfo(tcode).value))
+                except OSError:
+                    pass
+            uin.syn()
+
+            debug_count = 0
+            last_config_check = 0.0
+            disconnected = False
+
+            try:
+                while running_flag() and not watcher.paused:
+                    now = time.monotonic()
+                    forced = reload_flag()
+                    if forced or (now - last_config_check >= cfg.get("reload_interval", 1.0)):
+                        last_config_check = now
+                        if watcher.maybe_reload(force=forced):
+                            if watcher.paused:
+                                break
+                            wrote_reload = False
+                            for stick in ("left", "right"):
+                                _, _, _, _, wrote_now = emit_stick(stick, watcher.profile, now)
+                                wrote_reload = wrote_reload or wrote_now
+                            if wrote_reload:
+                                uin.syn()
+                        cfg = watcher.cfg
+                        new_match = cfg["device_name_match"]
+                        if new_match != active_match:
+                            active_match = new_match
+                            if active_match and active_match.lower() not in src.name.lower():
+                                log.info(
+                                    "device_name_match changed to %r; switching controller",
+                                    active_match,
+                                )
+                                break
+
+                    if flush_pending_sticks(watcher.profile, now):
+                        uin.syn()
+
+                    select_timeout = min(
+                        cfg.get("reload_interval", 1.0),
+                        next_flush_wait(watcher.profile),
                     )
-                    wrote_any = wrote_any or wrote_now
-                    if cfg.get("debug_sample_rate"):
-                        debug_count += 1
-                        if debug_count % cfg["debug_sample_rate"] == 0:
-                            log.debug(
-                                "[%s] %s stick raw=(%.3f,%.3f) out=(%d,%d)",
-                                watcher.profile_name,
-                                stick,
-                                x,
-                                y,
-                                out_x,
-                                out_y,
-                            )
-                dirty_sticks.clear()
+                    r, _, _ = select.select([src.fd, wakeup_fd], [], [], select_timeout)
+                    if not running_flag() or watcher.paused:
+                        break
+                    if src.fd not in r:
+                        continue
 
-            for ev in events:
-                if ev.type == ecodes.EV_ABS and ev.code in axis_to_stick_slot:
-                    stick, slot = axis_to_stick_slot[ev.code]
-                    stick_raw[stick][slot] = axis_state[ev.code].normalize(ev.value)
-                    dirty_sticks.add(stick)
-                elif ev.type == ecodes.EV_SYN and ev.code == ecodes.SYN_REPORT:
+                    try:
+                        events = list(src.read())
+                    except (OSError, BlockingIOError):
+                        disconnected = True
+                        break
+
+                    ev_now = time.monotonic()
+                    dirty_sticks = set()
+                    wrote_any = False
+
+                    def flush_frame():
+                        nonlocal debug_count, wrote_any
+                        if not dirty_sticks:
+                            return
+                        for stick in dirty_sticks:
+                            x, y, out_x, out_y, wrote_now = emit_stick(
+                                stick, watcher.profile, ev_now
+                            )
+                            wrote_any = wrote_any or wrote_now
+                            if cfg.get("debug_sample_rate"):
+                                debug_count += 1
+                                if debug_count % cfg["debug_sample_rate"] == 0:
+                                    log.debug(
+                                        "[%s] %s stick raw=(%.3f,%.3f) out=(%d,%d)",
+                                        watcher.profile_name,
+                                        stick,
+                                        x,
+                                        y,
+                                        out_x,
+                                        out_y,
+                                    )
+                        dirty_sticks.clear()
+
+                    for ev in events:
+                        if ev.type == ecodes.EV_ABS:
+                            if ev.code in axis_to_stick_slot:
+                                stick, slot = axis_to_stick_slot[ev.code]
+                                stick_raw[stick][slot] = axis_state[ev.code].normalize(ev.value)
+                                dirty_sticks.add(stick)
+                            elif ev.code in trigger_state:
+                                norm_trig = trigger_state[ev.code].normalize_u8(ev.value)
+                                uin.write(ecodes.EV_ABS, ev.code, norm_trig)
+                                wrote_any = True
+                            elif ev.code in hat_codes:
+                                uin.write(ecodes.EV_ABS, ev.code, max(-1, min(1, ev.value)))
+                                wrote_any = True
+                        elif ev.type == ecodes.EV_KEY:
+                            if ev.code in dpad_btn_map:
+                                dpad_buttons[dpad_btn_map[ev.code]] = 1 if ev.value else 0
+                                hat_x = dpad_buttons["right"] - dpad_buttons["left"]
+                                hat_y = dpad_buttons["down"] - dpad_buttons["up"]
+                                uin.write(ecodes.EV_ABS, ecodes.ABS_HAT0X, hat_x)
+                                uin.write(ecodes.EV_ABS, ecodes.ABS_HAT0Y, hat_y)
+                                wrote_any = True
+                            elif ev.code in virtual_keys:
+                                pressed = 1 if ev.value else 0
+                                if pressed:
+                                    pressed_keys.add(ev.code)
+                                else:
+                                    pressed_keys.discard(ev.code)
+                                uin.write(ecodes.EV_KEY, ev.code, pressed)
+                                wrote_any = True
+                        elif ev.type == ecodes.EV_SYN and ev.code == ecodes.SYN_REPORT:
+                            flush_frame()
+                            if wrote_any:
+                                uin.syn()
+                                wrote_any = False
+
                     flush_frame()
                     if wrote_any:
                         uin.syn()
-                        wrote_any = False
-                elif ev.type in (ecodes.EV_KEY, ecodes.EV_ABS):
-                    uin.write(ev.type, ev.code, ev.value)
-                    wrote_any = True
-
-            flush_frame()
-            if wrote_any:
-                uin.syn()
+            finally:
+                try:
+                    src.ungrab()
+                except Exception:
+                    pass
+                try:
+                    src.close()
+                except Exception:
+                    pass
+                reset_virtual_state()
+                if disconnected and running_flag() and not watcher.paused:
+                    log.warning(
+                        "Physical controller disconnected; virtual receiver kept alive, waiting for reconnect."
+                    )
     finally:
-        try:
-            src.ungrab()
-        except Exception:
-            pass
-        try:
-            src.close()
-        except Exception:
-            pass
         try:
             uin.close()
         except Exception:
             pass
-        if disconnected and running_flag():
-            log.warning("Source device disconnected; waiting for reconnect.")
+        log.info("Virtual Xbox 360 receiver closed.")
 
     return True
 
@@ -1068,11 +1202,6 @@ def cmd_daemon(args):
 
     def consume_reload_flag():
         nonlocal reload_requested
-        try:
-            while wakeup_r.recv(64):
-                pass
-        except BlockingIOError:
-            pass
         if reload_requested:
             reload_requested = False
             return True
@@ -1106,9 +1235,11 @@ def cmd_daemon(args):
     try:
         while running:
             try:
-                run_session(watcher, waiter, lambda: running, wakeup_r.fileno(), consume_reload_flag)
+                run_receiver_lifecycle(
+                    watcher, waiter, lambda: running, wakeup_r.fileno(), consume_reload_flag
+                )
             except Exception as e:
-                log.exception("Unexpected error in session: %s", e)
+                log.exception("Unexpected error in receiver lifecycle: %s", e)
                 if running:
                     select.select([wakeup_r.fileno()], [], [], 1.0)
     finally:
@@ -1144,7 +1275,7 @@ def cmd_list(args):
     daemon_pid = get_running_daemon_pid()
 
     daemon_str = f"running (PID {daemon_pid})" if daemon_pid else "not running"
-    state_str = "PAUSED (virtual device disabled)" if paused else "ACTIVE"
+    state_str = "PAUSED (virtual receiver disabled)" if paused else "ACTIVE"
 
     print(f"Config:  {path}")
     print(f"Daemon:  {daemon_str}")
@@ -1248,7 +1379,7 @@ def cmd_switch(args):
 
 
 def cmd_devices(_args):
-    InputDevice, _, ecodes, list_devices = _import_evdev()
+    _, InputDevice, _, ecodes, list_devices = _import_evdev()
     print(f"{'PATH':<18} {'MATCH':<20} {'VID:PID':<11} NAME")
     print("-" * 78)
     for path in sorted(list_devices()):
@@ -1290,10 +1421,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.add_argument("-s", "--short", action="store_true", help="Print compact state:profile string")
     p_status.set_defaults(func=cmd_status)
 
-    p_pause = sub.add_parser("pause", help="Release controller grab and remove virtual device")
+    p_pause = sub.add_parser("pause", help="Release controller grab and remove virtual receiver")
     p_pause.set_defaults(func=cmd_pause)
 
-    p_resume = sub.add_parser("resume", help="Re-enable virtual device and active profile")
+    p_resume = sub.add_parser("resume", help="Re-enable virtual receiver and active profile")
     p_resume.set_defaults(func=cmd_resume)
 
     p_toggle = sub.add_parser("toggle", help="Toggle between paused and active")
