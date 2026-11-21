@@ -3,3 +3,38 @@ KERNEL=="hidraw*", ATTRS{idProduct}=="6012", ATTRS{idVendor}=="2dc8", MODE="0660
 
 # 8BitDo Ultimate 2 Wireless - Bluetooth
 KERNEL=="hidraw*", KERNELS=="*2DC8:6012*", MODE="0660", TAG+="uaccess"
+
+# Gamesir: Zenless Zone Zero edition: configuration verified wired and on its dongle.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="105d", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="105e", TAG+="uaccess"
+# Wuchang receiver: wireless configuration verified on descriptor 5.18.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10a8", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="109b", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="109c", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10ba", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10bb", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1003", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1004", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="100a", TAG+="uaccess"
+# G7 Pro Wuchang Edition (firmware 5.41): configuration reads/writes verified.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10a7", TAG+="uaccess"
+
+# The Kaleid configures over raw USB too: its register channel is the GameSir
+# register protocol tunnelled through Xbox GIP, on interface 0 of its GIP
+# identity. Only that identity needs a rule -- the pad's other two modes
+# (1082 DirectInput, 1086 XInput) are never opened over libusb, and their hidraw
+# and input nodes are already covered by the two vendor-wide rules above.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1012", TAG+="uaccess"
+
+# G7 SE descriptor 6.30: native USB authentication and rear-button remapping.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1010", TAG+="uaccess"
+
+# G7 SE descriptor 6.64: its configurable identity is 1069 (Xbox GIP), reached when
+# the pad is plugged in across a cold boot. 10a0/1082 are never opened over libusb.
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1069", TAG+="uaccess"
+
+# G7 Pro 8K PC
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="0575", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1034", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1035", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10b8", TAG+="uaccess"

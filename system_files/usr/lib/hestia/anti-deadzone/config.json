@@ -1,0 +1,63 @@
+{
+  "_comment": "Hestia Anti-Deadzone configuration. Keys starting with '_' are ignored.",
+  "paused": false,
+  "device_name_match": "",
+  "active_profile": "my-game",
+  "max_output_hz": 250,
+  "reload_interval": 1.0,
+  "rescan_interval": 1.0,
+  "debug_sample_rate": 0,
+  "realtime_priority": false,
+  "profiles": {
+    "default": {
+      "left": {
+        "deadzone_shape": "radial",
+        "deadzone": 0.05,
+        "outer_deadzone": 0.0,
+        "anti_deadzone": 0.15,
+        "curve": 1.0
+      },
+      "right": {
+        "deadzone_shape": "bowtie",
+        "deadzone": 0.02,
+        "outer_deadzone": 0.0,
+        "axial_deadzone": 0.12,
+        "anti_deadzone": 0.20,
+        "curve": 1.25
+      },
+      "left_trigger": {
+        "deadzone": 0.0,
+        "outer_deadzone": 0.0
+      },
+      "right_trigger": {
+        "deadzone": 0.0,
+        "outer_deadzone": 0.0
+      }
+    },
+    "my-game": {
+      "left": {
+        "deadzone_shape": "radial",
+        "deadzone": 0.0025,
+        "outer_deadzone": 0.02,
+        "anti_deadzone": 0.20,
+        "curve": 1.0
+      },
+      "right": {
+        "deadzone_shape": "bowtie",
+        "deadzone": 0.0025,
+        "outer_deadzone": 0.02,
+        "axial_deadzone": 0.14,
+        "anti_deadzone": 0.25,
+        "curve": 1.4
+      },
+      "left_trigger": {
+        "deadzone": 0.02,
+        "outer_deadzone": 0.10
+      },
+      "right_trigger": {
+        "deadzone": 0.02,
+        "outer_deadzone": 0.50
+      }
+    }
+  }
+}
