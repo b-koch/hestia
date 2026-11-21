@@ -41,6 +41,6 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1035", MODE="0660", 
 KERNEL=="hidraw*", ATTRS{idVendor}=="3537", ATTRS{idProduct}=="1034", MODE="0660", TAG+="uaccess"
 KERNEL=="hidraw*", ATTRS{idVendor}=="3537", ATTRS{idProduct}=="1035", MODE="0660", TAG+="uaccess"
 
-# GameSir G7 Pro 8K Fallback for PlayStation-/Switch-Mode PIDs)
+# GameSir G7 Pro 8K Fallback for PlayStation-/Switch-Mode PIDs
 SUBSYSTEM=="usb", ATTR{idVendor}=="3537", MODE="0660", TAG+="uaccess"
 KERNEL=="hidraw*", ATTRS{idVendor}=="3537", MODE="0660", TAG+="uaccess"
