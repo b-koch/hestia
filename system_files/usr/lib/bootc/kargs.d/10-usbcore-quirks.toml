@@ -1,1 +1,1 @@
-kargs = ["usbcore.quirks=3537:1034:r"]
+kargs = ["usbcore.quirks=3537:1034:r,3537:1035:r"]

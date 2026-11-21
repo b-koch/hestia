@@ -33,8 +33,14 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1010", TAG+="uaccess
 # the pad is plugged in across a cold boot. 10a0/1082 are never opened over libusb.
 SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1069", TAG+="uaccess"
 
-# G7 Pro 8K PC
-SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="0575", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1034", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1035", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="10b8", TAG+="uaccess"
+# GameSir G7 Pro 8K (Plain Black) - Wired (1034) & 2.4GHz Dongle (1035)
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1034", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", ATTR{idProduct}=="1035", MODE="0660", TAG+="uaccess"
+
+# GameSir G7 Pro 8K HIDRAW
+KERNEL=="hidraw*", ATTRS{idVendor}=="3537", ATTRS{idProduct}=="1034", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="3537", ATTRS{idProduct}=="1035", MODE="0660", TAG+="uaccess"
+
+# GameSir G7 Pro 8K Fallback for PlayStation-/Switch-Mode PIDs)
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="3537", MODE="0660", TAG+="uaccess"
