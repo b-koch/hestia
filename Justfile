@@ -172,10 +172,15 @@ rechunk $target_image=image_name $tag=default_tag:
           --config /chunkah-config.json \
           --output oci:/run/out/chunked \
           --skip-special-files; then
-          echo "=== OFFENDING PACKAGE HEADER ===" >&2
-          grep "^@@PKG@@" /tmp/rpm.out | tail -n 2 >&2 || true
-          echo "=== EXACT LAST 30 LINES ===" >&2
-          tail -n 30 /tmp/rpm.out >&2 || true
+          echo "=== MALFORMED / BAD-COLUMN RPM LINES ===" >&2
+          awk -F"\t" '\''
+            /^@@PKG@@\t/  { pkg=$0; if (NF!=12) print "BAD PKG NF=" NF ": " $0; next }
+            /^@@FILE@@\t/ { if (NF!=10) print "BAD FILE NF=" NF " in " pkg ": " $0; next }
+            /^@@CL@@\t/   { if (NF!=2)  print "BAD CL NF=" NF " in " pkg ": " $0; next }
+            { print "UNEXPECTED LINE in " pkg ": " $0 }
+          '\'' /tmp/rpm.out >&2 || true
+          echo "=== PACKAGES IN LAST 80KB OF PIPE BUFFER ===" >&2
+          tail -c 81920 /tmp/rpm.out | grep "^@@PKG@@" >&2 || true
           exit 1
         fi
       '
