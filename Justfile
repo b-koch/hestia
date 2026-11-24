@@ -155,15 +155,25 @@ rechunk $target_image=image_name $tag=default_tag:
       --mount=type=image,src="${target_image}:${tag}",target=/chunkah \
       -v "${CHUNKAH_CONFIG_FILE}:/chunkah-config.json:ro,Z" \
       -v "${CHUNKAH_OUTPUT_DIR}:/run/out:Z" \
-      quay.io/coreos/chunkah:latest \
-      build \
-      --verbose \
-      --compressed \
-      --max-layers 128 \
-      --prune /sysroot/ \
-      --label ostree.commit- --label ostree.final-diffid- \
-      --config /chunkah-config.json \
-      --output oci:/run/out/chunked
+      --entrypoint /bin/sh \
+      quay.io/coreos/chunkah:latest -c '
+        mv /usr/bin/rpm /usr/bin/rpm.real
+        printf "#!/bin/sh\necho \"RPM ARGS: \$*\" >&2\n/usr/bin/rpm.real \"\$@\" | tee -a /tmp/rpm.out\n" > /usr/bin/rpm
+        chmod +x /usr/bin/rpm
+        if ! chunkah build \
+          --verbose \
+          --compressed \
+          --max-layers 128 \
+          --prune /sysroot/ \
+          --label ostree.commit- --label ostree.final-diffid- \
+          --config /chunkah-config.json \
+          --output oci:/run/out/chunked \
+          --skip-special-files; then
+          echo "=== LAST 50 LINES BEFORE SIGPIPE ===" >&2
+          tail -n 50 /tmp/rpm.out >&2 || true
+          exit 1
+        fi
+      '
 
     CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
     podman tag "${CHUNKED_IMAGE}" "${target_image}:${tag}"
@@ -440,3 +450,6 @@ format:
     fi
     # Run shfmt on all Bash scripts
     find . -iname "*.sh" -type f -exec shfmt --write "{}" ';'
+```[cite: 4]
+
+Paste the `=== LAST 50 LINES BEFORE SIGPIPE ===` output from the next CI run once it finishes, and we can immediately address whichever package or file triggered it.
