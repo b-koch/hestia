@@ -51,5 +51,10 @@ echo "Enable services..."
 echo "Building initramfs..."
 /ctx/scripts/build-initramfs.sh
 
+echo "build.sh debugging..."
+rpm -q --whatrequires qt6-qt3d || true
+dnf5 remove -y qt6-qt3d
+rpm -qa --queryformat '%{NAME}\t[%{FILENAMES}\n]' | LC_ALL=C grep -Pn '[\x80-\xff]' || true
+
 echo "Final cleanup..."
 /ctx/scripts/cleanup.sh
