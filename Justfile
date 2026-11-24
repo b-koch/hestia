@@ -102,14 +102,14 @@ build $target_image=image_name $tag=default_tag $base_digest="":
     LABELS=()
     if [[ -z "$(git status -s)" ]]; then
         GIT_SHA=$(git rev-parse --short HEAD)
-        LABELS+=("--label" "io.artifacthub.package.readme-url=[https://raw.githubusercontent.com/](https://raw.githubusercontent.com/){{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
-        LABELS+=("--label" "org.opencontainers.image.documentation=[https://raw.githubusercontent.com/](https://raw.githubusercontent.com/){{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
-        LABELS+=("--label" "org.opencontainers.image.source=[https://github.com/](https://github.com/){{ repo_organization }}/{{ image_name }}/blob/${GIT_SHA}/Containerfile")
-        LABELS+=("--label" "org.opencontainers.image.url=[https://github.com/](https://github.com/){{ repo_organization }}/{{ image_name }}/tree/${GIT_SHA}")
+        LABELS+=("--label" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/{{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
+        LABELS+=("--label" "org.opencontainers.image.documentation=https://raw.githubusercontent.com/{{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
+        LABELS+=("--label" "org.opencontainers.image.source=https://github.com/{{ repo_organization }}/{{ image_name }}/blob/${GIT_SHA}/Containerfile")
+        LABELS+=("--label" "org.opencontainers.image.url=https://github.com/{{ repo_organization }}/{{ image_name }}/tree/${GIT_SHA}")
         LABELS+=("--label" "org.opencontainers.image.version={{ default_tag }}.$(date +%Y%m%d)-${GIT_SHA}")
     fi
 
-    # Image metadata for [https://artifacthub.io/](https://artifacthub.io/) - This is optional but is highly recommended so we all can get a index of all the custom images
+    # Image metadata for https://artifacthub.io/ - This is optional but is highly recommended so we all can get a index of all the custom images
     # The metadata by itself is not going to do anything, you choose if you want your image to be on ArtifactHub or not.
     LABELS+=("--label" "io.artifacthub.package.deprecated=false")
     LABELS+=("--label" "io.artifacthub.package.keywords={{ image_keywords }}")
@@ -160,8 +160,7 @@ rechunk $target_image=image_name $tag=default_tag:
         mv /usr/bin/rpm /usr/bin/rpm.real
         cat << '\''EOF'\'' > /usr/bin/rpm
     #!/bin/sh
-    echo "RPM ARGS: $*" >> /tmp/rpm.args
-    /usr/bin/rpm.real "$@" | tee -a /tmp/rpm.out
+    /usr/bin/rpm.real "$@" | awk '\''{ print > "/tmp/rpm.out"; fflush("/tmp/rpm.out"); print; fflush() }'\''
     EOF
         chmod +x /usr/bin/rpm
         if ! chunkah build \
@@ -173,10 +172,10 @@ rechunk $target_image=image_name $tag=default_tag:
           --config /chunkah-config.json \
           --output oci:/run/out/chunked \
           --skip-special-files; then
-          echo "=== RPM ARGS ===" >&2
-          cat /tmp/rpm.args >&2 || true
-          echo "=== LAST 50 LINES BEFORE SIGPIPE ===" >&2
-          tail -n 50 /tmp/rpm.out >&2 || true
+          echo "=== OFFENDING PACKAGE HEADER ===" >&2
+          grep "^@@PKG@@" /tmp/rpm.out | tail -n 2 >&2 || true
+          echo "=== EXACT LAST 30 LINES ===" >&2
+          tail -n 30 /tmp/rpm.out >&2 || true
           exit 1
         fi
       '
