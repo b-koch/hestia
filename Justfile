@@ -160,10 +160,15 @@ rechunk $target_image=image_name $tag=default_tag:
         mv /usr/bin/rpm /usr/bin/rpm.real
         cat << '\''EOF'\'' > /usr/bin/rpm
     #!/bin/sh
-    /usr/bin/rpm.real "$@" | awk '\''{ print > "/tmp/rpm.out"; fflush("/tmp/rpm.out"); print; fflush() }'\''
+    /usr/bin/rpm.real "$@" | awk -F"\t" -v OFS="\t" '\''
+      $1 == "@@PKG@@"  && $8 == "(none)" { $8 = "0" }
+      $1 == "@@FILE@@" { if ($3 == "(none)") $3 = "0"; if ($4 == "(none)") $4 = "0"; if ($5 == "(none)") $5 = "0"; if ($7 == "(none)") $7 = "0" }
+      $1 == "@@CL@@"   && $2 == "(none)" { $2 = "0" }
+      { print }
+    '\''
     EOF
         chmod +x /usr/bin/rpm
-        if ! chunkah build \
+        exec chunkah build \
           --verbose \
           --compressed \
           --max-layers 128 \
@@ -171,18 +176,7 @@ rechunk $target_image=image_name $tag=default_tag:
           --label ostree.commit- --label ostree.final-diffid- \
           --config /chunkah-config.json \
           --output oci:/run/out/chunked \
-          --skip-special-files; then
-          echo "=== MALFORMED / BAD-COLUMN RPM LINES ===" >&2
-          awk -F"\t" '\''
-            /^@@PKG@@\t/  { pkg=$0; if (NF!=12) print "BAD PKG NF=" NF ": " $0; next }
-            /^@@FILE@@\t/ { if (NF!=10) print "BAD FILE NF=" NF " in " pkg ": " $0; next }
-            /^@@CL@@\t/   { if (NF!=2)  print "BAD CL NF=" NF " in " pkg ": " $0; next }
-            { print "UNEXPECTED LINE in " pkg ": " $0 }
-          '\'' /tmp/rpm.out >&2 || true
-          echo "=== PACKAGES IN LAST 80KB OF PIPE BUFFER ===" >&2
-          tail -c 81920 /tmp/rpm.out | grep "^@@PKG@@" >&2 || true
-          exit 1
-        fi
+          --skip-special-files
       '
 
     CHUNKED_IMAGE="$(podman pull "oci:${CHUNKAH_OUTPUT_DIR}/chunked")"
