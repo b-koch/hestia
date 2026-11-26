@@ -25,9 +25,11 @@ cat > /usr/lib/systemd/user/antideadzone.service <<'UNIT_EOF'
 [Unit]
 Description=Hestia Stick & Trigger Anti-Deadzone Daemon
 After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
 ExecStartPre=/usr/bin/sh -c 'mkdir -p "%h/.config/hestia/anti-deadzone" && { [ -f "%h/.config/hestia/anti-deadzone/config.json" ] || { [ -f /etc/hestia/anti-deadzone/config.json ] && cp /etc/hestia/anti-deadzone/config.json "%h/.config/hestia/anti-deadzone/config.json"; }; } || true'
 ExecStart=/usr/lib/hestia/anti-deadzone/adz daemon
 ExecReload=/bin/kill -HUP $MAINPID
@@ -35,7 +37,7 @@ Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target default.target
 UNIT_EOF
 chmod 0644 /usr/lib/systemd/user/antideadzone.service
 
