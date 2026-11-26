@@ -15,7 +15,7 @@ import {SHADOW_SLOTS} from './shadowProfile.js';
 // Clutter sets each uniform as a single value, so every shadow layer has uniforms of its own.
 const SLOTS = Array.from({length: SHADOW_SLOTS}, (_, i) => i);
 
-const DECLARATIONS = `
+export const DECLARATIONS = `
 // In actor pixels; the radii run clockwise from top-left.
 uniform vec4 bounds;
 uniform vec4 radii;
@@ -26,6 +26,7 @@ uniform float texelScale;
 uniform float smear;
 uniform float borderRemovalWidth;
 uniform float clip;
+uniform float pictureOpacity;
 
 uniform float outlineWidth;
 uniform float outlineOffset;
@@ -142,9 +143,11 @@ vec2 removalSample(vec2 p, vec2 halfSize, float r, float d) {
 }
 `;
 
-const CODE = `
+export const CODE = `
 // Already applied to cogl_color_out, but not to what is added to it.
 float opacity = cogl_color_in.a;
+// The outline and shadow fade with the window's picture, as libadwaita draws them in it.
+float drawnOpacity = opacity * pictureOpacity;
 
 float removalWidth = borderRemovalWidth > 0.0 ? borderRemovalWidth + 2.0 * smear / texelScale : 0.0;
 
@@ -172,15 +175,61 @@ if (d > -(max(removalWidth, -outlineOffset) + 0.5 / texelScale)) {
         float uncovered = 1.0 - content;
         // Once at fractional scales, so edges don't pulse as the window moves.
         float layer = smear > 0.0 ? 1.0 : uncovered;
-        cogl_color_out = mix(cogl_color_out, shadow(p, halfSize) * layer * opacity, uncovered * layer);
+        cogl_color_out = mix(cogl_color_out, shadow(p, halfSize) * layer * drawnOpacity, uncovered * layer);
     }
 
     // GTK draws the outline over the window and its shadow.
     float outlineBand = coverage(d - outlineOffset - outlineWidth) - coverage(d - outlineOffset);
     float oa = outlineBand * outlineColor.a;
-    cogl_color_out = cogl_color_out * (1.0 - oa) + vec4(outlineColor.rgb, 1.0) * oa * opacity;
+    cogl_color_out = cogl_color_out * (1.0 - oa) + vec4(outlineColor.rgb, 1.0) * oa * drawnOpacity;
 }
 `;
+
+/**
+ * The uniforms a look sets, by name.
+ *
+ * @param {number[]} bounds - Frame rect [x1, y1, x2, y2], in actor pixels.
+ * @param {number[]} radii - Clockwise from top-left, in actor pixels.
+ * @param {object} look - A look from compileStyle().
+ * @param {string} border - How the app's own border is hidden: 'off', 'clip', or else extended.
+ * @returns {Array<[string, number[]]>}
+ */
+export function lookUniforms(bounds, radii, look, border) {
+    return [
+        ['clip', [border === 'clip' ? 1 : 0]],
+        ['bounds', bounds],
+        ['radii', radii],
+        ['outlineWidth', [look.outlineWidth]],
+        ['outlineOffset', [look.outlineOffset]],
+        ['outlineColor', look.outlineColor],
+        ...look.slots.flatMap(({shape, color}, i) => [[`shadowShape${i}`, shape], [`shadowColor${i}`, color]]),
+    ];
+}
+
+/**
+ * How much further than its width an app blurs its own border: one pixel at a fractional scale.
+ *
+ * @param {Meta.WindowActor} actor
+ * @returns {number} In actor pixels; none for a stretched buffer, like a video player's 1x1 one.
+ */
+export function appBlur(actor) {
+    const content = actor.get_texture();
+    const buffer = content.get_texture();
+    const [, logicalWidth, logicalHeight] = content.get_preferred_size();
+    const appScale = Math.sqrt(buffer.get_width() * buffer.get_height() / (logicalWidth * logicalHeight));
+    return appScale > 1 && appScale % 1 !== 0 ? 1 / appScale : 0;
+}
+
+/**
+ * The opacity of the window's picture, where mutter applies an X11 window's opacity and some extensions fade it.
+ *
+ * @param {Meta.WindowActor} actor
+ * @returns {number} In 0..1.
+ */
+export function pictureOpacity(actor) {
+    const picture = actor.get_children().find(child => child.constructor.$gtype.name.startsWith('MetaSurface'));
+    return picture.opacity / 255;
+}
 
 export const RoundedCornersEffect = GObject.registerClass(
 class RoundedCornersEffect extends Clutter.ShaderEffect {
@@ -188,88 +237,87 @@ class RoundedCornersEffect extends Clutter.ShaderEffect {
         super();
         this._smear = 0;
         this._borderWidth = 0;
+        this._uniforms = new Map();
     }
 
     vfunc_get_static_snippet() {
         return Cogl.Snippet.new(Cogl.SnippetHook.FRAGMENT, DECLARATIONS, CODE);
     }
 
-    // Mapped on every paint, since at fractional scales the paint volume moves with the actor.
-    vfunc_paint_target(node, paintContext) {
-        this._mapFramebuffer();
-        super.vfunc_paint_target(node, paintContext);
-    }
-
-    // Where Clutter places the framebuffer, as in clutter_offscreen_effect_pre_paint().
-    _mapFramebuffer() {
-        const [, width, height] = this.get_target_size();
-        const actor = this.get_actor();
-        const scale = actor.get_resource_scale();
-        const spanX = width / scale;
-        const spanY = height / scale;
-
-        const volume = actor.get_paint_volume();
-        let x, y;
-        if (volume) {
-            const origin = volume.get_origin();
-            x = Math.ceil(origin.x + volume.get_width() + 0.75) - spanX;
-            y = Math.ceil(origin.y + volume.get_height() + 0.75) - spanY;
-        } else {
-            const box = actor.get_allocation_box();
-            x = Math.trunc(Math.ceil(box.x2 + 0.75) - spanX - box.x1);
-            y = Math.trunc(Math.ceil(box.y2 + 0.75) - spanY - box.y1);
-        }
-
-        this.set_uniform_float('fboMap', 4, [x, y, spanX, spanY]);
-        this.set_uniform_float('texelScale', 1, [scale]);
-
-        // Fractional scales blur the window by up to a texel. Off screen, keep the last value, as Clutter does.
-        const views = actor.peek_stage_views();
-        if (views.length > 0)
-            this._smear = Math.max(...views.map(view => view.get_scale())) % 1 === 0 ? 0 : 1;
-        this.set_uniform_float('smear', 1, [this._smear]);
-
-        // An app at a fractional scale blurs its border one pixel further.
-        // A stretched buffer, like a video player's 1x1 one, has none.
-        const content = actor.get_texture();
-        const buffer = content ? content.get_texture() : null;
-        let appScale = 1;
-        if (buffer) {
-            const [, logicalWidth, logicalHeight] = content.get_preferred_size();
-            appScale = Math.sqrt(buffer.get_width() * buffer.get_height() / (logicalWidth * logicalHeight));
-        }
-        const blur = appScale > 1 && appScale % 1 !== 0 ? 1 / appScale : 0;
-        this.set_uniform_float('borderRemovalWidth', 1, [this._borderWidth > 0 ? this._borderWidth + blur : 0]);
+    // The smear follows the window's monitors, which can change without it being drawn again, as an X11 window's do.
+    vfunc_set_actor(actor) {
+        this.actor?.disconnectObject(this);
+        super.vfunc_set_actor(actor);
+        actor?.connectObject('stage-views-changed', () => this._setSmear(), this);
     }
 
     /**
-     * @param {number[]} bounds - Frame rect [x1, y1, x2, y2], in actor pixels.
-     * @param {number[]} radii - Clockwise from top-left, in actor pixels.
-     * @param {object} look - A look from compileStyle().
-     * @param {string} border - How the app's own border is hidden: 'off', 'clip', or else extended.
+     * Where Clutter places the framebuffer for this volume, as in clutter_offscreen_effect_pre_paint().
+     *
+     * @param {Clutter.PaintVolume} volume - The one Clutter sizes the framebuffer from.
+     */
+    mapFramebuffer(volume) {
+        const actor = this.get_actor();
+        const origin = volume.get_origin();
+        const spanX = Math.round(volume.get_width()) + 3;
+        const spanY = Math.round(volume.get_height()) + 3;
+        const x = Math.ceil(origin.x + volume.get_width() + 0.75) - spanX;
+        const y = Math.ceil(origin.y + volume.get_height() + 0.75) - spanY;
+        this._setUniform('fboMap', [x, y, spanX, spanY]);
+        this._setUniform('texelScale', [actor.get_resource_scale()]);
+        this._setSmear();
+        this._setBorderRemoval();
+        this._setUniform('pictureOpacity', [pictureOpacity(actor)]);
+    }
+
+    // Fractional scales blur the window by up to a texel. Off screen, keep the last value, as Clutter does.
+    _setSmear() {
+        const views = this.get_actor().peek_stage_views();
+        if (views.length > 0)
+            this._smear = Math.max(...views.map(view => view.get_scale())) % 1 === 0 ? 0 : 1;
+        this._setUniform('smear', [this._smear]);
+    }
+
+    _setBorderRemoval() {
+        const removal = this._borderWidth > 0 ? this._borderWidth + appBlur(this.get_actor()) : 0;
+        this._setUniform('borderRemovalWidth', [removal]);
+    }
+
+    // Outside a paint, setting a uniform repaints the window.
+    _setUniform(name, values) {
+        const last = this._uniforms.get(name);
+        if (last && last.every((value, i) => value === values[i]))
+            return;
+        this._uniforms.set(name, values);
+        this.set_uniform_float(name, values.length, values);
+    }
+
+    /**
+     * @param {number[]} bounds - As for lookUniforms().
+     * @param {number[]} radii
+     * @param {object} look
+     * @param {string} border
      * @param {number} borderWidth
      */
     update(bounds, radii, look, border, borderWidth) {
         this._borderWidth = border === 'off' ? 0 : borderWidth;
-        this.set_uniform_float('clip', 1, [border === 'clip' ? 1 : 0]);
-        this.set_uniform_float('bounds', 4, bounds);
-        this.set_uniform_float('radii', 4, radii);
-        this.set_uniform_float('outlineWidth', 1, [look.outlineWidth]);
-        this.set_uniform_float('outlineOffset', 1, [look.outlineOffset]);
-        this.set_uniform_float('outlineColor', 4, look.outlineColor);
-        look.slots.forEach(({shape, color}, i) => {
-            this.set_uniform_float(`shadowShape${i}`, 4, shape);
-            this.set_uniform_float(`shadowColor${i}`, 4, color);
-        });
+        for (const [name, values] of lookUniforms(bounds, radii, look, border))
+            this.set_uniform_float(name, values.length, values);
+        this._setBorderRemoval();
     }
 });
 
 // Room for the shadow and outline, given to the offscreen effect after it.
+// The effect is mapped here, not when painted, as GJS would keep each paint's buffers until it collects garbage.
 export const ShadowRoomEffect = GObject.registerClass(
 class ShadowRoomEffect extends Clutter.Effect {
-    constructor() {
+    /**
+     * @param {RoundedCornersEffect} effect
+     */
+    constructor(effect) {
         super();
         this._box = new Clutter.ActorBox();
+        this._effect = effect;
     }
 
     /**
@@ -288,6 +336,8 @@ class ShadowRoomEffect extends Clutter.Effect {
     vfunc_modify_paint_volume(volume) {
         if (this.enabled)
             volume.union_box(this._box);
+        if (this._effect.enabled)
+            this._effect.mapFramebuffer(volume);
         return true;
     }
 });
