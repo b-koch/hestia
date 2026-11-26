@@ -1,1 +1,0 @@
-/usr/lib/hestia/RazerBatteryTray/razer_battery_tray.sh
