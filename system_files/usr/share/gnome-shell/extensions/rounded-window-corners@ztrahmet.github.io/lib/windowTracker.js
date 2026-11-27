@@ -11,8 +11,11 @@ import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
 import {customStyle} from './customStyle.js';
 import {RoundedCornersEffect, ShadowRoomEffect} from './roundedCornersEffect.js';
+import {SharpRoundedCornersEffect, newSnippet} from './sharpRoundedCornersEffect.js';
 import {compileStyle} from './shadowProfile.js';
 import {STYLE_KEYS, StyleValues} from './styleSettings.js';
 import {StyleResolver} from './styleResolver.js';
@@ -20,6 +23,7 @@ import {windowToolkit} from './toolkitProbe.js';
 
 const EFFECT_NAME = 'rounded-window-corners';
 const ROOM_NAME = 'rounded-window-corners-room';
+const SHARP_NAME = 'rounded-window-corners-sharp';
 
 const ROUNDABLE_TYPES = new Set([
     Meta.WindowType.NORMAL,
@@ -34,7 +38,7 @@ const SWITCHES = new Map([
 ]);
 
 const RULE_KEYS = [
-    ...SWITCHES.values(), 'round-maximized',
+    ...SWITCHES.values(), 'round-maximized', 'round-overview', 'sharp-windows',
     'use-allowlist', 'blocklist', 'allowlist', 'blocklist-toolkits', 'allowlist-toolkits',
 ];
 
@@ -85,7 +89,9 @@ export class WindowTracker {
         this._extensionPath = extensionPath;
         this._settings = settings;
         this._values = new StyleValues(settings);
+        this._sharpSnippet = newSnippet();
         this._styles = null;
+        this._overviewShown = Main.overview.visible && !Main.overview.animationInProgress;
 
         this._settings.connectObject('change-event', (_settings, keys) => {
             this._settingsChanged(keys && keys.map(key => GLib.quark_to_string(key)));
@@ -98,10 +104,18 @@ export class WindowTracker {
 
         global.display.connectObject('window-created',
             (_display, win) => this._track(win.get_compositor_private()), this);
+
+        const overviewShown = shown => {
+            this._overviewShown = shown;
+            if (!this._rules.overview)
+                this._syncAll();
+        };
+        Main.overview.connectObject('shown', () => overviewShown(true), 'hiding', () => overviewShown(false), this);
     }
 
     destroy() {
         global.display.disconnectObject(this);
+        Main.overview.disconnectObject(this);
         this._settings.disconnectObject(this);
 
         for (const actor of this._windows.keys())
@@ -113,10 +127,12 @@ export class WindowTracker {
     /**
      * @param {Meta.Window} win
      * @param {?string} toolkit - From windowToolkit().
-     * @returns {?object} {style, border, borderWidth}, or null if the window isn't rounded.
+     * @returns {?object} {style, border, borderWidth}, or null if not rounded; style is null until the CSS is read.
      */
     roundingFor(win, toolkit) {
-        const {allowlist, apps, toolkits, switchedOff} = this._rules;
+        const {allowlist, apps, toolkits, switchedOff, overview} = this._rules;
+        if (this._overviewShown && !overview)
+            return null;
         const app = appId(win);
         const listed = toolkits.includes(toolkit) || apps.includes(app);
         if (allowlist ? !listed : listed || switchedOff.has(toolkit))
@@ -130,6 +146,14 @@ export class WindowTracker {
 
     get roundsMaximized() {
         return this._rules.maximized;
+    }
+
+    get keepsSharp() {
+        return this._rules.sharp;
+    }
+
+    get sharpSnippet() {
+        return this._sharpSnippet;
     }
 
     // Rereads only what the changed keys affect; null means any key may have changed.
@@ -164,6 +188,8 @@ export class WindowTracker {
             switchedOff: new Set([...SWITCHES.keys()].filter(toolkit =>
                 !this._settings.get_boolean(SWITCHES.get(toolkit)))),
             maximized: this._settings.get_boolean('round-maximized'),
+            overview: this._settings.get_boolean('round-overview'),
+            sharp: this._settings.get_boolean('sharp-windows'),
         };
     }
 
@@ -203,8 +229,10 @@ class RoundedWindow {
         this._toolkit = toolkit;
         this._tracker = tracker;
         this._effect = null;
+        this._sharp = null;
         this._room = null;
         this._texture = null;
+        this._style = null;
         this._width = 0;
         this._height = 0;
         this._updated = [];
@@ -230,6 +258,7 @@ class RoundedWindow {
         this._texture?.disconnectObject(this);
         if (this._effect) {
             this._actor.remove_effect(this._effect);
+            this._actor.remove_effect(this._sharp);
             this._actor.remove_effect(this._room);
         }
     }
@@ -243,9 +272,12 @@ class RoundedWindow {
             this._addEffects();
         if (drawing)
             this._update(drawing);
-        if (this._effect && this._effect.enabled !== (drawing !== null)) {
+        const sharp = drawing !== null && this._tracker.keepsSharp;
+        const plain = drawing !== null && !sharp;
+        if (this._effect && (this._effect.enabled !== plain || this._sharp.enabled !== sharp)) {
             this._room.enabled = drawing !== null;
-            this._effect.enabled = drawing !== null;
+            this._effect.enabled = plain;
+            this._sharp.enabled = sharp;
             this._actor.invalidate_paint_volume();
         }
     }
@@ -287,21 +319,28 @@ class RoundedWindow {
         if (!rounding)
             return null;
 
+        // Until libadwaita's stylesheet and gtk.css are read, a window keeps the style it has.
+        this._style = rounding.style ?? this._style;
+        if (!this._style)
+            return null;
+
         // Tiled and maximized windows take libadwaita's look, rounded only if the settings say so.
-        const state = rounding.style[this._tiling ?? 'normal'];
-        const radii = this._tiling && this._tracker.roundsMaximized ? rounding.style.normal.radii : state.radii;
+        const state = this._style[this._tiling ?? 'normal'];
+        const radii = this._tiling && this._tracker.roundsMaximized ? this._style.normal.radii : state.radii;
         return state.draws || radii.some(r => r > 0) ? {...rounding, state, radii} : null;
     }
 
     // Ours go first, as effects like the Shell's dimmer size themselves from those before them.
     // Moving an effect drops its animations, so this happens once; later, ours are only disabled.
     _addEffects() {
-        this._room = new ShadowRoomEffect();
         this._effect = new RoundedCornersEffect();
+        this._room = new ShadowRoomEffect(this._effect);
+        this._sharp = new SharpRoundedCornersEffect(this._tracker.sharpSnippet);
         const others = this._actor.get_effects();
         others.forEach(effect => this._actor.remove_effect(effect));
         this._actor.add_effect_with_name(ROOM_NAME, this._room);
         this._actor.add_effect_with_name(EFFECT_NAME, this._effect);
+        this._actor.add_effect_with_name(SHARP_NAME, this._sharp);
         others.forEach(effect => this._actor.add_effect(effect));
     }
 
@@ -325,6 +364,7 @@ class RoundedWindow {
         if (update.every((value, i) => value === this._updated[i]))
             return;
         this._updated = update;
-        this._effect.update([x1, y1, x2, y2], radii, look, border, borderWidth);
+        for (const effect of [this._effect, this._sharp])
+            effect.update([x1, y1, x2, y2], radii, look, border, borderWidth);
     }
 }

@@ -15,6 +15,18 @@
       <summary>Keep maximized and tiled windows rounded</summary>
       <description>Their outline and shadow follow libadwaita. Fullscreen windows stay square.</description>
     </key>
+    <key name="round-overview" type="b">
+      <default>true</default>
+      <summary>Keep windows rounded in the overview</summary>
+      <description>Off, the overview shows them as their apps draw them.</description>
+    </key>
+    <key name="sharp-windows" type="b">
+      <default>false</default>
+      <summary>Keep rounded windows sharp at fractional scales and in the overview</summary>
+      <description>
+        Experimental. Draws them through a buffer at the scale they are shown at, not one at the next whole scale.
+      </description>
+    </key>
     <key name="use-allowlist" type="b">
       <default>false</default>
       <summary>Use the allowlist instead of the blocklist</summary>
@@ -30,7 +42,7 @@
     <key name="blocklist-toolkits" type="as">
       <default>[]</default>
       <summary>Toolkits whose apps are not rounded</summary>
-      <description>Toolkits: libadwaita, libhandy, chromium, firefox, java, qt, gtk4 and gtk3.</description>
+      <description>Toolkits: libadwaita, libhandy, wine, chromium, firefox, java, qt, gtk4 and gtk3.</description>
     </key>
     <key name="allowlist-toolkits" type="as">
       <default>[]</default>
@@ -117,12 +129,23 @@
     <key name="app-styles" type="a{sa{sv}}">
       <default>{}</default>
       <summary>Styles of their own, by the apps’ desktop IDs</summary>
-      <description>Each holds any of the keys from custom-style to border-width that it sets; the others keep their defaults. Without a border-method, the toolkit’s style decides how the app’s border is hidden, then the general one.</description>
+      <description>
+        Each holds any of the keys from custom-style to border-width that it sets; the others keep their defaults.
+        Without a border-method, the toolkit’s style decides how the app’s border is hidden, then the general one.
+      </description>
     </key>
     <key name="toolkit-styles" type="a{sa{sv}}">
-      <default>{'chromium': {'border-method': &lt;'off'&gt;}, 'firefox': {'border-method': &lt;'off'&gt;}, 'gtk4': {'border-method': &lt;'off'&gt;}, 'gtk3': {'border-method': &lt;'off'&gt;}}</default>
+      <default>{
+        'chromium': {'border-method': &lt;'off'&gt;},
+        'firefox': {'border-method': &lt;'off'&gt;},
+        'gtk4': {'border-method': &lt;'off'&gt;},
+        'gtk3': {'border-method': &lt;'off'&gt;}
+      }</default>
       <summary>Styles of their own, by toolkit</summary>
-      <description>As in app-styles, by the toolkits in blocklist-toolkits. Those listed by default draw little or no border of their own, so they leave it alone.</description>
+      <description>
+        As in app-styles, by the toolkits in blocklist-toolkits.
+        Those listed by default draw little or no border of their own, so they leave it alone.
+      </description>
     </key>
   </schema>
 </schemalist>
