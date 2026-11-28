@@ -1,6 +1,6 @@
 # Hestia
 
-A production-focused desktop image built on top of Bazzite-GNOME.
+A production-focused desktop image built with the ublue-os image template.
 
 Hestia is a personal Linux image designed for development, productivity, and everyday computing while retaining the gaming optimizations and hardware support that make Bazzite a strong foundation.
 
